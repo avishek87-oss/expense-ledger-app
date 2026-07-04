@@ -11,9 +11,9 @@ Copy-Item "$root\www\*" "$root\dist\" -Recurse
 
 $idx = "$root\dist\index.html"
 $html = [IO.File]::ReadAllText($idx)
-$html = $html.Replace('__GAS_URL__',    [string]$secrets.gasUrl)
-$html = $html.Replace('__UPDATE_URL__', [string]$secrets.updateUrl)
-$html = $html.Replace('__API_TOKEN__',  [string]$secrets.apiToken)
+$html = $html.Replace('__GAS_URL__',       [string]$secrets.gasUrl)
+$html = $html.Replace('__UPDATE_URL__',    [string]$secrets.updateUrl)
+$html = $html.Replace('__WEB_CLIENT_ID__', [string]$secrets.webClientId)
 [IO.File]::WriteAllText($idx, $html, (New-Object Text.UTF8Encoding $false))
 
 Write-Host "dist/ staged (gasUrl: $(if($secrets.gasUrl){'set'}else{'EMPTY - sync disabled'}), updateUrl: $(if($secrets.updateUrl){'set'}else{'EMPTY - self-update disabled'}))"

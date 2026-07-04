@@ -231,6 +231,13 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 }
 
 /* ── Payment picker bottom sheet ── */
+.login-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-overlay.hidden{display:none}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:36px 28px;width:100%;max-width:360px;text-align:center}
+.login-title{font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px}
+.login-sub{font-family:var(--sans);font-size:14px;color:var(--muted);margin-bottom:28px}
+.login-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent}
+.login-err{font-family:var(--sans);font-size:13px;color:var(--maroon);margin-top:16px;min-height:18px}
 .pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 .pay-overlay.hidden{display:none}
 .pay-sheet{background:var(--card);border-radius:16px 16px 0 0;padding:22px 20px 44px;width:100%;max-width:480px}
@@ -278,6 +285,18 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   <div id="app-body"></div>
   <footer>Household Ledger · <span id="app-ver"></span> · synced to Google Sheet</footer>
 </main>
+
+<div id="login-overlay" class="login-overlay hidden">
+  <div class="login-box">
+    <div class="login-title">Household Ledger</div>
+    <div class="login-sub">Sign in to sync with the family sheet</div>
+    <button class="login-btn" onclick="doLogin()">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Continue with Google
+    </button>
+    <div id="login-err" class="login-err"></div>
+  </div>
+</div>
 
 <div id="pay-overlay" class="pay-overlay hidden" onclick="cancelPay()">
   <div class="pay-sheet" onclick="event.stopPropagation()">
@@ -338,13 +357,16 @@ const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','che
 const APP_VERSION = '1.0.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
-const GAS_URL   = '__GAS_URL__';
-const API_TOKEN = '__API_TOKEN__';
+const GAS_URL = '__GAS_URL__';
+// OAuth "Web application" client ID — used for Google Sign-In
+const GOOGLE_WEB_CLIENT_ID = '__WEB_CLIENT_ID__';
 // Raw GitHub URL of version.json for self-update checks. Empty = updates off.
 const UPDATE_URL = '__UPDATE_URL__';
 
-// Sync is enabled whenever a real GAS URL is configured (placeholder = off)
-const IN_GAS = GAS_URL.startsWith('https://');
+const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+// Sync requires a configured GAS URL AND the native shell (Google Sign-In
+// lives in the native plugin) — in a plain browser the app runs local-only.
+const IN_GAS = GAS_URL.startsWith('https://') && IS_NATIVE;
 
 // ── State ──────────────────────────────────────────────────────────────────
 let appState = { months: {} };
@@ -617,6 +639,56 @@ function deleteMiscItem(cat,i) {
 
 function today() { return new Date().toISOString().slice(0,10); }
 
+// ── Google Sign-In ─────────────────────────────────────────────────────────
+const AUTH_KEY = 'household-ledger-auth-v1';
+let auth = null; // { email, idToken }
+
+function loadAuth() { try { const r = localStorage.getItem(AUTH_KEY); if (r) auth = JSON.parse(r); } catch(e){} }
+function saveAuth() { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
+
+let slPlugin = null, slInited = false;
+async function ensureSocialLogin() {
+  if (!IS_NATIVE) return null;
+  if (!slPlugin) { try { slPlugin = window.Capacitor.registerPlugin('SocialLogin'); } catch(e) { return null; } }
+  if (!slInited) {
+    await slPlugin.initialize({ google: { webClientId: GOOGLE_WEB_CLIENT_ID } });
+    slInited = true;
+  }
+  return slPlugin;
+}
+
+async function googleSignIn() {
+  try {
+    const SL = await ensureSocialLogin();
+    if (!SL) return false;
+    const res = await SL.login({ provider:'google', options:{ scopes:['email','profile'] } });
+    const r = (res && res.result) || res || {};
+    const idToken = r.idToken || (r.authentication && r.authentication.idToken);
+    if (!idToken) return false;
+    auth = { email: (r.profile && r.profile.email) || '', idToken };
+    saveAuth();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function showLogin(show) {
+  const el = document.getElementById('login-overlay');
+  if (el) el.classList.toggle('hidden', !show);
+}
+
+async function doLogin() {
+  const err = document.getElementById('login-err');
+  err.textContent = '';
+  if (await googleSignIn()) {
+    showLogin(false);
+    pullFromSheets();
+  } else {
+    err.textContent = 'Sign-in failed — check that this Google account is allowed, then try again.';
+  }
+}
+
 // ── Google Sheets sync (via GAS JSON API) ──────────────────────────────────
 // POST uses text/plain to stay a "simple" CORS request — GAS can't answer
 // preflight OPTIONS, but returns Access-Control-Allow-Origin:* on simple ones.
@@ -625,17 +697,32 @@ let pushBusy  = false;
 
 function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500); }
 
+// ID tokens expire after ~1h. On an auth error, silently re-login once and
+// retry; if that fails too, surface the sign-in screen.
+async function withAuthRetry(call) {
+  if (!auth || !auth.idToken) { showLogin(true); return null; }
+  let j = await call();
+  if (j && !j.ok && (j.error === 'expired' || j.error === 'unauthorized')) {
+    if (await googleSignIn()) j = await call();
+    else { showLogin(true); return null; }
+    if (j && !j.ok && (j.error === 'expired' || j.error === 'unauthorized')) { showLogin(true); return null; }
+  }
+  return j;
+}
+
 async function pushToSheets() {
   if (pushBusy) { pushDirty = true; return; }
   pushBusy = true;
   setSyncState('busy');
   try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ token: API_TOKEN, data: JSON.stringify(appState) }),
+    const j = await withAuthRetry(async () => {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ idToken: auth.idToken, data: JSON.stringify(appState) }),
+      });
+      return res.json();
     });
-    const j = await res.json();
     setSyncState(j && j.ok ? 'ok' : 'err');
   } catch (e) {
     setSyncState('err'); // offline or GAS unreachable — data is safe locally
@@ -649,8 +736,10 @@ async function pullFromSheets() {
   if (pushBusy || pushDirty || syncTimer) return;
   setSyncState('busy');
   try {
-    const res = await fetch(GAS_URL + '?token=' + encodeURIComponent(API_TOKEN));
-    const j = await res.json();
+    const j = await withAuthRetry(async () => {
+      const res = await fetch(GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken));
+      return res.json();
+    });
     if (j && j.ok) {
       const remote = JSON.parse(j.data);
       if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; saveLocal(); render(); }
@@ -1403,10 +1492,14 @@ function cmpVer(a, b) {
 // ── Boot ───────────────────────────────────────────────────────────────────
 loadLocal();
 loadUI();
+loadAuth();
 render();
 document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
 
-if (IN_GAS) pullFromSheets();
+if (IN_GAS) {
+  if (auth && auth.idToken) pullFromSheets(); // token may be stale — sync retries auth silently
+  else showLogin(true);
+}
 checkForAppUpdate();
 
 // Re-pull shared data whenever the app comes back to the foreground,
