@@ -1467,22 +1467,30 @@ function renderOutstanding() {
 // ── Self-update (Capacitor + capgo updater) ────────────────────────────────
 // Checks version.json on GitHub; if a newer bundle exists, downloads and
 // switches to it. Data (localStorage) is untouched. Silent when offline.
+function updStatus(msg) {
+  const el = document.getElementById('app-ver');
+  if (el) el.textContent = 'v' + APP_VERSION + (msg ? ' · ' + msg : '');
+}
 async function checkForAppUpdate() {
   if (!UPDATE_URL.startsWith('https://')) return;
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
   let Updater;
-  try { Updater = cap.registerPlugin('CapacitorUpdater'); } catch (e) { return; }
+  try { Updater = cap.registerPlugin('CapacitorUpdater'); } catch (e) { updStatus('upd: no plugin'); return; }
   try { await Updater.notifyAppReady(); } catch (e) {}
   try {
+    updStatus('checking update…');
     const res  = await fetch(UPDATE_URL + '?t=' + Date.now(), { cache:'no-store' });
+    if (!res.ok) { updStatus('upd: feed HTTP ' + res.status); return; }
     const info = await res.json();
-    if (!info || !info.version || !info.url) return;
-    if (cmpVer(info.version, APP_VERSION) <= 0) return; // already current
-    setSyncState('busy');
+    if (!info || !info.version || !info.url) { updStatus('upd: bad feed'); return; }
+    if (cmpVer(info.version, APP_VERSION) <= 0) { updStatus(''); return; } // already current
+    updStatus('downloading v' + info.version + '…');
     const bundle = await Updater.download({ url: info.url, version: info.version });
+    updStatus('installing v' + info.version + '…');
     await Updater.set(bundle); // reloads the app on the new bundle
   } catch (e) {
+    updStatus('upd err: ' + ((e && (e.message || e.code)) || String(e)).slice(0, 120));
     setSyncState(IN_GAS ? 'ok' : 'off'); // update failed — keep running current version
   }
 }
