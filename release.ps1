@@ -29,10 +29,10 @@ if ($LASTEXITCODE -ne 0) { throw "gh release failed" }
 
 # 5. Bump version.json and push (phones check this file)
 $repo = gh repo view --json nameWithOwner -q .nameWithOwner
-@{ version = $Version; url = "https://github.com/$repo/releases/download/v$Version/bundle.zip" } |
-  ConvertTo-Json | Out-File "$root\version.json" -Encoding utf8
+$vjson = @{ version = $Version; url = "https://github.com/$repo/releases/download/v$Version/bundle.zip" } | ConvertTo-Json
+[IO.File]::WriteAllText("$root\version.json", $vjson, (New-Object Text.UTF8Encoding $false))
 
 git add www/index.html version.json
 git commit -m "Release v$Version"
 git push
-Write-Host "`nReleased v$Version — installed apps will update on next open."
+Write-Host "`nReleased v$Version - installed apps will update on next open."
