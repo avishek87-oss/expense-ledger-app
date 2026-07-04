@@ -1,0 +1,10 @@
+{
+  "appId": "com.avishek.ledger",
+  "appName": "Household Ledger",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorUpdater": {
+      "autoUpdate": false
+    }
+  }
+}

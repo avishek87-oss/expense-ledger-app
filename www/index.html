@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="375">
+<meta name="theme-color" content="#1f2a24">
+<link rel="manifest" id="pwa-manifest">
+<title>Household Ledger</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f1ece0; --card:#fcfaf4; --card-2:#fbf8f1;
+  --ink:#1f2a24; --ink-soft:#4a4437;
+  --muted:#847b6a; --faint:#b3ab98;
+  --border:#ddd5c4; --line:#e8e1d1;
+  --maroon:#8b3a3a; --maroon-soft:#b47474;
+  --green:#3f5344; --green-soft:#8a9686;
+  --cream:#f7f4ec;
+  --serif:Georgia,'Iowan Old Style','Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+  --shadow:0 1px 2px rgba(31,42,36,.035),0 6px 20px rgba(31,42,36,.05);
+  --radius:8px;
+}
+html{-webkit-text-size-adjust:100%}
+body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased}
+input,select,button{font-family:inherit;-webkit-appearance:none}
+/* 16px minimum on all text inputs/selects prevents Android auto-zoom on focus */
+input:not([type=checkbox]),select,textarea{font-size:16px}
+input[type=checkbox]{-webkit-appearance:checkbox}
+button{color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+
+/* ══ Header ══ */
+#hdr{position:sticky;top:0;z-index:100;background:rgba(241,236,224,.92);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border);padding:12px 16px 0;padding-top:calc(12px + env(safe-area-inset-top))}
+#hdr-inner{max-width:1140px;margin:0 auto}
+#hdr-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#hdr h1{font-size:19px;letter-spacing:-0.015em;font-weight:600}
+#hdr h1 .sub{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:2px}
+#sync-chip{font-family:var(--sans);font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:var(--card);-webkit-tap-highlight-color:transparent;white-space:nowrap}
+#sync-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
+#sync-dot.ok{background:var(--green)}#sync-dot.busy{background:#c8a93a;animation:blink 1s infinite}#sync-dot.err{background:var(--maroon)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Tabs ── */
+#tab-bar{display:flex;gap:2px;margin-top:12px}
+.tab-btn{flex:0 0 auto;padding:9px 2px 10px;margin-right:22px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s;font-weight:600}
+.tab-btn.active{color:var(--ink);border-bottom-color:var(--maroon)}
+
+/* ── Month nav ── */
+#month-nav{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0}
+#month-nav.hidden{display:none}
+.nav-btn{width:44px;height:44px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:22px;color:var(--ink);display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:background .15s,border-color .15s}
+.nav-btn:hover{border-color:var(--ink);background:#fff}
+#month-lbl{font-family:var(--serif);font-size:18px;font-weight:600;min-width:150px;text-align:center;letter-spacing:-0.01em}
+#month-lbl .yr{color:var(--muted);font-weight:400}
+.today-jump{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--maroon);background:none;border:1px solid var(--maroon);border-radius:999px;padding:5px 11px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;font-weight:600}
+.today-jump.hidden{display:none}
+
+/* ══ Main ══ */
+main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
+
+/* ── Hero ── */
+.hero{background:var(--ink);color:var(--cream);border-radius:14px;padding:22px 22px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;top:0;right:0;width:180px;height:180px;background:radial-gradient(circle at top right,rgba(255,255,255,.06),transparent 70%);pointer-events:none}
+.hero-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.hero-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:rgba(247,244,236,.6);font-weight:600}
+.hero-num{font-family:var(--mono);font-size:36px;font-weight:600;letter-spacing:-0.02em;margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
+.hero-num.g{color:#a9c6a9}
+.hero-stats{display:flex;gap:26px;padding-bottom:3px}
+.hstat .k{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(247,244,236,.55);font-weight:600}
+.hstat .v{font-family:var(--mono);font-size:16px;margin-top:3px;color:var(--cream);font-variant-numeric:tabular-nums}
+.hstat .v.g{color:#a9c6a9}
+.hero-bar{height:8px;border-radius:99px;background:rgba(247,244,236,.14);margin-top:18px;overflow:hidden}
+.hero-bar>i{display:block;height:100%;background:linear-gradient(90deg,#6e8570,#93ab8f);border-radius:99px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.hero-foot{display:flex;align-items:baseline;justify-content:space-between;margin-top:9px;font-family:var(--sans);font-size:11px;color:rgba(247,244,236,.6)}
+.hero-foot .mono{color:rgba(247,244,236,.82)}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:16px 4px 4px}
+.tbtn{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;font-weight:600;transition:color .15s}
+.tbtn:hover{color:var(--ink)}
+
+/* ── Section grid ── */
+#sections{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+
+/* ── Card ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-hd{width:100%;display:flex;align-items:center;gap:12px;padding:18px 18px;background:none;border:none;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent}
+.card-hd.static{cursor:default}
+.chev{font-size:22px;color:var(--faint);line-height:1;flex-shrink:0;transition:transform .25s ease;width:14px;text-align:center}
+.card.open .chev{transform:rotate(90deg);color:var(--muted)}
+.hd-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.hd-title{font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:-0.01em}
+.hd-sub{display:flex;align-items:center;gap:8px}
+.tag-due{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--maroon)}
+.tag-ok{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--green);display:flex;align-items:center;gap:4px}
+.tag-ok::before{content:"✓";font-size:11px}
+.tag-none{font-family:var(--sans);font-size:11px;color:var(--faint)}
+.hd-amt{font-family:var(--mono);font-size:17px;font-weight:600;flex-shrink:0;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+.hd-amt.r{color:var(--maroon)}
+.hd-bar{height:3px;background:var(--line)}
+.hd-bar>i{display:block;height:100%;background:var(--green-soft);transition:width .4s ease}
+.card.settled .hd-bar>i{background:var(--green)}
+
+/* collapse animation */
+.card-body-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.3,.8,.4,1)}
+.card.open .card-body-wrap{grid-template-rows:1fr}
+.card-body-wrap>.card-body{overflow:hidden;min-height:0}
+.card-body{padding:0 18px}
+.card.open .card-body{padding-bottom:8px}
+
+/* ── Ledger row ── */
+.lrow{border-top:1px solid var(--line)}
+.card-body>.lrow:first-child,.card-body>.sublbl:first-child{border-top:none}
+.lrow-main{display:flex;align-items:center;justify-content:space-between;padding:15px 0;gap:12px}
+.lrow-left{min-width:0;flex:1}
+.lrow-label{font-size:17px;font-weight:600;color:var(--ink)}
+.lrow-sub{font-family:var(--sans);font-size:14px;color:var(--muted);margin-top:3px;line-height:1.4}
+.lrow-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.lrow-amt{font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+.lrow-ctrl{padding:2px 0 14px;display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+
+/* ── Paid toggle ── */
+.pbtn{font-family:var(--sans);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:9px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;min-height:44px;-webkit-tap-highlight-color:transparent;transition:background .15s,color .15s,border-color .15s}
+.pbtn.due{border:1px solid var(--maroon);background:transparent;color:var(--maroon)}
+.pbtn.due:hover{background:var(--maroon);color:var(--cream)}
+.pbtn.paid{border:1px solid var(--green);background:var(--green);color:var(--cream)}
+.pbtn.paid:hover{filter:brightness(1.1)}
+.pbtn.sm{font-size:11px;padding:8px 13px;min-height:40px}
+.pbtn.act{border:1px solid var(--green);background:var(--green);color:var(--cream)}
+.pbtn.act:hover{filter:brightness(1.1)}
+
+/* ── Stepper ── */
+.field{display:flex;align-items:center;gap:10px}
+.field-lbl{font-family:var(--sans);font-size:12px;color:var(--muted)}
+.stepper{display:flex;align-items:center;gap:10px}
+.sbtn{width:44px;height:44px;border-radius:8px;border:1px solid var(--border);background:var(--card-2);cursor:pointer;font-size:22px;color:var(--ink);display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
+.sbtn:hover{border-color:var(--ink);background:#fff}
+.sval{font-family:var(--mono);font-size:17px;min-width:30px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* ── Date chips ── */
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding:0 0 14px}
+.chip{width:42px;height:42px;font-family:var(--mono);font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card-2);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
+.chip:hover{border-color:var(--ink)}
+.chip.on{border-color:var(--ink);background:var(--ink);color:var(--cream);font-weight:600}
+
+/* ── Sub-section label ── */
+.sublbl{font-family:var(--sans);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;padding:16px 0 4px;border-top:1px solid var(--line)}
+
+/* ── Checkbox ── */
+.chk-row{display:flex;align-items:center;gap:10px;font-family:var(--sans);font-size:14px;color:var(--ink-soft);cursor:pointer;min-height:44px}
+.chk-row input{width:22px;height:22px;cursor:pointer;accent-color:var(--green);flex-shrink:0}
+
+/* ── Add row + misc list ── */
+.misc-add,.g-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 0 4px}
+.misc-txt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);flex:1;min-width:120px;min-height:44px}
+.misc-amt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:16px;background:#fff;color:var(--ink);width:100px;min-height:44px}
+.sel{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);min-height:44px}
+.misc-txt:focus,.misc-amt:focus,.sel:focus{outline:none;border-color:var(--ink)}
+.add-btn{background:var(--ink);color:var(--cream);border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent;transition:filter .15s}
+.add-btn:hover{filter:brightness(1.25)}
+.mitem,.g-item{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:11px 0;gap:10px}
+.mitem-left,.g-item-left{min-width:0;flex:1}
+.mitem-txt{font-size:15px;color:var(--ink)}
+.g-item-txt{font-family:var(--sans);font-size:14px;color:var(--ink-soft)}
+.mitem-date,.g-item-date{font-family:var(--sans);font-size:12px;color:var(--faint);margin-top:2px}
+.mitem-right,.g-item-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.mitem-amt,.g-item-amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
+.del-btn{background:none;border:none;color:var(--faint);font-size:24px;cursor:pointer;padding:0 6px;min-height:44px;line-height:1;-webkit-tap-highlight-color:transparent;transition:color .15s}
+.del-btn:hover{color:var(--maroon)}
+.mtotal{display:flex;align-items:center;justify-content:space-between;padding:14px 0 6px;border-top:1px solid var(--line);margin-top:2px}
+.mtotal-lbl{font-family:var(--sans);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.mtotal-val{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ── Vendor split ── */
+.vendor-row{display:flex;gap:12px;padding:12px 0 4px}
+.vendor-item{flex:1;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--card-2)}
+.vendor-item .v-lbl{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.vendor-item .v-val{font-family:var(--mono);font-size:17px;margin-top:3px;font-variant-numeric:tabular-nums}
+
+/* ── Base override ── */
+.base-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.base-lbl{font-family:var(--sans);font-size:14px;color:var(--muted)}
+.base-edit-btn{background:none;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:4px 8px;line-height:1;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent;transition:color .15s}
+.base-edit-btn:hover{color:var(--ink)}
+.base-inp{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:16px;width:110px;background:#fff;color:var(--ink);min-height:44px}
+.base-ok{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent}
+.base-cancel{background:none;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--sans);font-size:13px;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent;color:var(--ink)}
+
+/* ── Outstanding ── */
+.ogroup{margin:0}
+.out-item{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:13px 0;gap:12px}
+.out-item-name{font-size:16px;font-weight:600;color:var(--ink);min-width:0}
+.out-item-sub{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:2px}
+.out-item-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.out-amt{font-family:var(--mono);font-size:15px;color:var(--maroon);font-variant-numeric:tabular-nums}
+.empty-state{text-align:center;padding:64px 20px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.empty-state .big{font-size:40px;line-height:1}
+.empty-state .msg{font-family:var(--serif);font-size:18px;color:var(--ink);margin-top:14px}
+.empty-state .sub{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:6px}
+
+footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--faint);padding:32px 0 8px;letter-spacing:.02em}
+
+/* ══ Responsive ══ */
+@media (min-width:720px){
+  #hdr h1{font-size:22px}
+  main{padding:22px 24px 110px}
+  .hero{padding:28px 30px 22px}
+  .hero-num{font-size:44px}
+  .hero-stats{gap:36px}
+  .hstat .v{font-size:18px}
+  .card-hd{padding:18px 22px}
+  .card-body{padding:0 22px}
+  .hd-title{font-size:18px}
+  .lrow-label{font-size:16px}
+  .today-jump{margin-left:8px}
+}
+@media (min-width:1000px){
+  #sections{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .card.span2{grid-column:1 / -1}
+  .toolbar{padding-top:20px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+
+/* ── Payment picker bottom sheet ── */
+.pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.pay-overlay.hidden{display:none}
+.pay-sheet{background:var(--card);border-radius:16px 16px 0 0;padding:22px 20px 44px;width:100%;max-width:480px}
+.pay-sheet-title{font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;margin-bottom:16px;text-align:center}
+.pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.pmth-btn{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:15px 12px;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
+.pmth-btn:hover{border-color:var(--ink);background:#fff}
+.pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
+/* Method chip */
+.paid-grp{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pay-chip{font-family:var(--sans);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:999px;background:var(--green);color:var(--cream);white-space:nowrap}
+/* Payments tab */
+.pmth-total-row{display:flex;align-items:baseline;justify-content:space-between;padding:11px 0 5px;border-top:1px solid var(--line);margin-top:2px}
+.pmth-total-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.pmth-total-val{font-family:var(--mono);font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div id="hdr-inner">
+    <div id="hdr-top">
+      <h1>Household Ledger<span class="sub">Avishek Family</span></h1>
+      <div id="sync-chip" title="Your data is saved on this device">
+        <span id="sync-dot"></span>
+        <span id="sync-lbl">Sheets</span>
+      </div>
+    </div>
+    <div id="tab-bar">
+      <button id="tab-ledger"      class="tab-btn active" onclick="switchTab('ledger')">Ledger</button>
+      <button id="tab-outstanding" class="tab-btn"        onclick="switchTab('outstanding')">Outstanding</button>
+      <button id="tab-payments"    class="tab-btn"        onclick="switchTab('payments')">Payments</button>
+    </div>
+    <div id="month-nav">
+      <button class="nav-btn" onclick="shiftMonth(-1)" aria-label="Previous month">‹</button>
+      <span id="month-lbl"></span>
+      <button class="nav-btn" onclick="shiftMonth(1)" aria-label="Next month">›</button>
+      <button id="today-jump" class="today-jump hidden" onclick="jumpToday()">Today</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div id="summary"></div>
+  <div id="app-body"></div>
+  <footer>Household Ledger · <span id="app-ver"></span> · synced to Google Sheet</footer>
+</main>
+
+<div id="pay-overlay" class="pay-overlay hidden" onclick="cancelPay()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title">Pay via</div>
+    <div id="pay-methods" class="pay-methods"></div>
+    <button class="pay-cancel" onclick="cancelPay()">Cancel</button>
+  </div>
+</div>
+
+
+<script>
+// ── PWA Manifest ─────────────────────────────────────────────────────────────
+(function(){
+  const icon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%231f2a24'/%3E%3Crect x='130' y='110' width='252' height='292' rx='12' fill='%23f7f4ec'/%3E%3Crect x='158' y='170' width='196' height='18' rx='4' fill='%231f2a24'/%3E%3Crect x='158' y='210' width='196' height='18' rx='4' fill='%231f2a24'/%3E%3Crect x='158' y='250' width='140' height='18' rx='4' fill='%231f2a24'/%3E%3Crect x='158' y='310' width='80' height='28' rx='4' fill='%238b3a3a'/%3E%3Crect x='258' y='310' width='96' height='28' rx='4' fill='%233f5344'/%3E%3C/svg%3E";
+  const m = {
+    name: 'Household Ledger', short_name: 'Ledger',
+    description: 'Avishek Family Household Ledger',
+    start_url: location.href.split('?')[0],
+    display: 'standalone', orientation: 'portrait',
+    background_color: '#f1ece0', theme_color: '#1f2a24',
+    icons: [{ src: icon, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }]
+  };
+  const blob = new Blob([JSON.stringify(m)], { type: 'application/manifest+json' });
+  const el = document.getElementById('pwa-manifest');
+  if (el) el.href = URL.createObjectURL(blob);
+  const vp = document.querySelector('meta[name="viewport"]');
+  if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover');
+  // no zoom hack needed — Android Chrome handles viewport correctly
+})();
+
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const MAIDS = [
+  { key:'nirmala', label:'Nirmala', base:10000 },
+  { key:'varsha',  label:'Varsha',  base:7500  },
+  { key:'meenal',  label:'Meenal',  base:4000  },
+  { key:'sujata',  label:'Sujata',  base:2800  },
+];
+const SUKANYA = 12500;
+const STORAGE_KEY = 'household-ledger-v1';
+const UI_KEY = 'household-ledger-ui-v1';
+const MIN_MONTH = '2026-03';
+
+const PAY_METHODS = [
+  { key:'axisCC',      label:'Axis CC',      short:'Axis'    },
+  { key:'scapiaCC',    label:'Scapia CC',    short:'Scapia'  },
+  { key:'avishekBank', label:'Avishek Bank', short:'Avishek' },
+  { key:'nehaCash',    label:'Neha Cash',    short:'N·Cash'  },
+  { key:'nehaBank',    label:'Neha Bank',    short:'N·Bank'  },
+];
+// Items with exactly one valid payment method — skip picker, auto-confirm
+const FIXED_METHOD = { rent:'avishekBank', sukanya:'nehaBank', carEmi:'avishekBank' };
+// Items that cannot use credit cards — picker shows only bank/cash options
+const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','chess','skating','swimming','bharatnatyam']);
+
+// ── App config ─────────────────────────────────────────────────────────────
+const APP_VERSION = '1.0.0';
+// Google Apps Script JSON API over the shared household Google Sheet.
+// Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
+const GAS_URL   = '__GAS_URL__';
+const API_TOKEN = '__API_TOKEN__';
+// Raw GitHub URL of version.json for self-update checks. Empty = updates off.
+const UPDATE_URL = '__UPDATE_URL__';
+
+// Sync is enabled whenever a real GAS URL is configured (placeholder = off)
+const IN_GAS = GAS_URL.startsWith('https://');
+
+// ── State ──────────────────────────────────────────────────────────────────
+let appState = { months: {} };
+let currentMonth = todayMonthKey();
+let currentTab = 'ledger';
+let syncTimer = null;
+let uiPrefs = { collapsed: {} };
+let gDraft = { vendor:'Sagar', category:'veges', amount:'' };
+let miscDrafts = {};
+let pendingPay = null;
+
+function todayMonthKey() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+}
+
+function emptyMonth() {
+  return {
+    maidLeaves:{ nirmala:2, varsha:2, meenal:2, sujata:2 },
+    japaDaysPresent:null,
+    swimmingAttended:false,
+    bharatnatyamAttended:false,
+    chessDates:[],
+    skatingDates:[],
+    groceries:[],
+    householdGroceries:[],
+    householdMisc:[],
+    aaviaMisc:[],
+    nehaMisc:[],
+    avishekMisc:[],
+    paid:{},
+    payMethod:{},
+    bases:{}
+  };
+}
+
+function getMD()        { return getMDFor(currentMonth); }
+function getMDFor(mk)   { return { ...emptyMonth(), ...(appState.months[mk] || {}) }; }
+
+function updateMonth(patch) {
+  const next = { ...getMD(), ...patch };
+  appState = { ...appState, months: { ...appState.months, [currentMonth]: next } };
+  saveLocal();
+  render();
+  if (IN_GAS) scheduleSync();
+}
+function updateMonthFor(mk, patch) {
+  const next = { ...getMDFor(mk), ...patch };
+  appState = { ...appState, months: { ...appState.months, [mk]: next } };
+  saveLocal();
+  render();
+  if (IN_GAS) scheduleSync();
+}
+
+// ── Storage ────────────────────────────────────────────────────────────────
+function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); }
+function loadLocal() {
+  try { const r = localStorage.getItem(STORAGE_KEY); if (r) appState = JSON.parse(r); } catch(e){}
+}
+function loadUI() {
+  try { const r = localStorage.getItem(UI_KEY); if (r) uiPrefs = { collapsed:{}, ...JSON.parse(r) }; } catch(e){}
+}
+function saveUI() {
+  try { localStorage.setItem(UI_KEY, JSON.stringify(uiPrefs)); } catch(e){}
+}
+
+// ── Pure calc helpers ──────────────────────────────────────────────────────
+function daysInMonth(mk) {
+  const [y,m] = mk.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function monthLabel(mk) {
+  const [y,m] = mk.split('-').map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString('en-IN',{ month:'long', year:'numeric' });
+}
+function monthShort(mk) {
+  const [y,m] = mk.split('-').map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString('en-IN',{ month:'short', year:'2-digit' });
+}
+function inr(n) {
+  const v = Math.round((n + Number.EPSILON)*100)/100;
+  return v.toLocaleString('en-IN',{ maximumFractionDigits:2 });
+}
+function addMonths(mk, d) {
+  const [y,m] = mk.split('-').map(Number);
+  const dt = new Date(y, m-1+d, 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+}
+function maidPayout(base, leaves, dim) {
+  const perDay = base / dim;
+  if (leaves > 2) return base - (leaves-2)*perDay;
+  if (leaves < 2) return base + (2-leaves)*perDay;
+  return base;
+}
+function defaultJapaDays(mk) {
+  if (mk==='2026-08') return 4;
+  if (mk==='2026-09') return 30;
+  if (mk==='2026-10') return 31;
+  return 0;
+}
+function japaMaidPayout(mk, daysPresent) {
+  const dim = daysInMonth(mk);
+  if (!(mk>='2026-08' && mk<='2026-10')) return 0;
+  const d = daysPresent==null ? defaultJapaDays(mk) : daysPresent;
+  return (28000/dim)*d;
+}
+
+// ── Effective base lookup ──────────────────────────────────────────────────
+function effectiveBase(mk, key, defaultVal) {
+  let m = mk;
+  while (m >= MIN_MONTH) {
+    const stored = appState.months[m];
+    if (stored && stored.bases && stored.bases[key] !== undefined) return stored.bases[key];
+    if (m === MIN_MONTH) break;
+    m = addMonths(m, -1);
+  }
+  return defaultVal;
+}
+
+// ── School fee functions ───────────────────────────────────────────────────
+function schoolMonthlyRate(mk) {
+  return effectiveBase(mk, 'schoolRate', 10357);
+}
+function schoolTuition(mk) {
+  const mo = parseInt(mk.split('-')[1]);
+  if (mo===2||mo===3) return 0;
+  const rate = schoolMonthlyRate(mk);
+  return mo===1 ? rate * 3 : rate;
+}
+function schoolTermFee(mk) {
+  const mo = parseInt(mk.split('-')[1]);
+  return (mo===4||mo===10) ? schoolMonthlyRate(mk) : 0;
+}
+function schoolBusFee(mk) {
+  const mo = parseInt(mk.split('-')[1]);
+  return (mo===4||mo===10) ? effectiveBase(mk, 'schoolBus', 25150) : 0;
+}
+function bizoneFee(mk) {
+  const mo = parseInt(mk.split('-')[1]);
+  return (mo===4||mo===10) ? effectiveBase(mk, 'bizone', 12285) : 0;
+}
+function englishFee(mk)  { return (mk==='2026-07'||mk==='2026-11') ? 10000 : 0; }
+function carEmiFee(mk)   { return (mk>='2022-08'&&mk<='2027-07') ? 37500 : 0; }
+function rentFee(mk) {
+  if (mk<'2026-08') return 80000;
+  if (mk==='2026-08') return 81548;
+  return 83000;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Tab / navigation ───────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-ledger').classList.toggle('active', tab==='ledger');
+  document.getElementById('tab-outstanding').classList.toggle('active', tab==='outstanding');
+  document.getElementById('tab-payments').classList.toggle('active', tab==='payments');
+  document.getElementById('month-nav').classList.toggle('hidden', tab==='outstanding');
+  window.scrollTo(0,0);
+  render();
+}
+function shiftMonth(d) {
+  const next = addMonths(currentMonth, d);
+  if (next < MIN_MONTH) return;
+  currentMonth = next;
+  gDraft = { vendor:'Sagar', category:'veges', amount:'' };
+  miscDrafts = {};
+  render();
+}
+function jumpToday() {
+  currentMonth = todayMonthKey();
+  gDraft = { vendor:'Sagar', category:'veges', amount:'' };
+  miscDrafts = {};
+  render();
+}
+
+// ── Paid toggle ────────────────────────────────────────────────────────────
+function togglePaid(key) {
+  // Only called to UNMARK an already-paid item; new payments go through startPayment
+  const md = getMD();
+  const pm = { ...(md.payMethod||{}) };
+  delete pm[key];
+  updateMonth({ paid:{ ...md.paid, [key]: false }, payMethod: pm });
+}
+
+// ── Maid leaves ────────────────────────────────────────────────────────────
+function changeLeaves(maidKey, delta) {
+  const md = getMD();
+  const cur = md.maidLeaves[maidKey] ?? 2;
+  updateMonth({ maidLeaves:{ ...md.maidLeaves, [maidKey]: Math.max(0, Math.min(31, cur+delta)) } });
+}
+function changeJapaDays(delta) {
+  const md = getMD();
+  const dim = daysInMonth(currentMonth);
+  const cur = md.japaDaysPresent ?? defaultJapaDays(currentMonth);
+  updateMonth({ japaDaysPresent: Math.max(0, Math.min(dim, cur+delta)) });
+}
+
+// ── Checkboxes ─────────────────────────────────────────────────────────────
+function toggleSwimming()     { const md=getMD(); updateMonth({ swimmingAttended: !md.swimmingAttended }); }
+function toggleBharatnatyam() { const md=getMD(); updateMonth({ bharatnatyamAttended: !md.bharatnatyamAttended }); }
+
+// ── Date chips ─────────────────────────────────────────────────────────────
+function toggleChessDate(day) {
+  const md = getMD();
+  const dates = md.chessDates || [];
+  updateMonth({ chessDates: dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b) });
+}
+function toggleSkatingDate(day) {
+  const md = getMD();
+  const dates = md.skatingDates || [];
+  updateMonth({ skatingDates: dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b) });
+}
+
+// ── Grocery ────────────────────────────────────────────────────────────────
+function captureGroceryDraft() {
+  const v=document.getElementById('g-vendor'); if(v) gDraft.vendor=v.value;
+  const c=document.getElementById('g-cat');    if(c) gDraft.category=c.value;
+  const a=document.getElementById('g-amt');    if(a) gDraft.amount=a.value;
+}
+function addGrocery() {
+  captureGroceryDraft();
+  const amt = Number(gDraft.amount);
+  if (!amt) return;
+  const md = getMD();
+  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date:today(), paid:false };
+  gDraft.amount='';
+  updateMonth({ groceries:[...(md.groceries||[]),entry] });
+}
+function toggleGroceryPaid(i) {
+  // Only called to UNMARK; marking goes through startPayment
+  captureGroceryDraft();
+  const md = getMD();
+  updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) });
+}
+function deleteGrocery(i) {
+  captureGroceryDraft();
+  const md = getMD();
+  updateMonth({ groceries:(md.groceries||[]).filter((_,idx)=>idx!==i) });
+}
+
+// ── Misc items ─────────────────────────────────────────────────────────────
+function captureMiscDraft(cat) {
+  const t=document.getElementById(`m-txt-${cat}`); if(t){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].text=t.value; }
+  const a=document.getElementById(`m-amt-${cat}`); if(a){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].amount=a.value; }
+}
+function addMiscItem(cat) {
+  captureMiscDraft(cat);
+  const d = miscDrafts[cat] || {};
+  const text = (d.text||'').trim();
+  const amt  = Number(d.amount||0);
+  if (!text || !amt) return;
+  const md = getMD();
+  miscDrafts[cat] = { text:'', amount:'' };
+  updateMonth({ [cat]:[...(md[cat]||[]),{ text, amount:amt, paid:false, date:today() }] });
+}
+function toggleMiscPaid(cat,i) {
+  // Only called to UNMARK; marking goes through startPayment
+  captureMiscDraft(cat);
+  const md = getMD();
+  updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) });
+}
+function deleteMiscItem(cat,i) {
+  captureMiscDraft(cat);
+  const md = getMD();
+  updateMonth({ [cat]:(md[cat]||[]).filter((_,idx)=>idx!==i) });
+}
+
+function today() { return new Date().toISOString().slice(0,10); }
+
+// ── Google Sheets sync (via GAS JSON API) ──────────────────────────────────
+// POST uses text/plain to stay a "simple" CORS request — GAS can't answer
+// preflight OPTIONS, but returns Access-Control-Allow-Origin:* on simple ones.
+let pushDirty = false;   // a save happened while a push was in flight
+let pushBusy  = false;
+
+function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500); }
+
+async function pushToSheets() {
+  if (pushBusy) { pushDirty = true; return; }
+  pushBusy = true;
+  setSyncState('busy');
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ token: API_TOKEN, data: JSON.stringify(appState) }),
+    });
+    const j = await res.json();
+    setSyncState(j && j.ok ? 'ok' : 'err');
+  } catch (e) {
+    setSyncState('err'); // offline or GAS unreachable — data is safe locally
+  }
+  pushBusy = false;
+  if (pushDirty) { pushDirty = false; scheduleSync(); }
+}
+
+async function pullFromSheets() {
+  // Local changes waiting to push win over a pull — let the push finish first
+  if (pushBusy || pushDirty || syncTimer) return;
+  setSyncState('busy');
+  try {
+    const res = await fetch(GAS_URL + '?token=' + encodeURIComponent(API_TOKEN));
+    const j = await res.json();
+    if (j && j.ok) {
+      const remote = JSON.parse(j.data);
+      if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; saveLocal(); render(); }
+      setSyncState('ok');
+    } else setSyncState('err');
+  } catch (e) {
+    setSyncState('err');
+  }
+}
+function setSyncState(s) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-lbl');
+  if (!dot) return;
+  dot.className = s==='ok'?'ok':s==='busy'?'busy':s==='err'?'err':'ok';
+  lbl.textContent = s==='ok'?'Synced':s==='busy'?'Syncing…':s==='err'?'Error':'Saved';
+}
+
+// ── Outstanding calculation ────────────────────────────────────────────────
+function getOutstandingItems() {
+  const end = todayMonthKey();
+  const result = [];
+  let mk = MIN_MONTH;
+  while (mk <= end) {
+    if (appState.months[mk]) {
+      const md  = getMDFor(mk);
+      const dim = daysInMonth(mk);
+      const due = [];
+      const chk = (label, amount, paidKey, sub) => {
+        if (amount > 0 && !md.paid[paidKey])
+          due.push({ label, sub:sub||'', amount, toggleType:'fixed', toggleKey:paidKey, toggleIdx:-1 });
+      };
+
+      MAIDS.forEach(m => {
+        const lv   = md.maidLeaves[m.key] ?? 2;
+        const base = effectiveBase(mk, m.key, m.base);
+        const amt  = maidPayout(base, lv, dim);
+        chk(m.label, amt, m.key, `base ₹${inr(base)} · ${lv} leave${lv===1?'':'s'}`);
+      });
+      const japaActive = mk>='2026-08' && mk<='2026-10';
+      if (japaActive) {
+        const days = md.japaDaysPresent ?? defaultJapaDays(mk);
+        chk('Japa Maid', (28000/dim)*days, 'japaMaid', `${days}/${dim} days`);
+      }
+
+      const tu=schoolTuition(mk), tf=schoolTermFee(mk), bf=schoolBusFee(mk);
+      const schoolMo = parseInt(mk.split('-')[1]);
+      const schoolSublbl = [
+        tu ? `tuition ₹${inr(tu)}${schoolMo===1?' (Jan+Feb+Mar)':''}` : null,
+        tf ? `term ₹${inr(tf)}` : null,
+        bf ? `bus ₹${inr(bf)}` : null,
+      ].filter(Boolean).join(' + ');
+      chk('PG Garodia School', tu+tf+bf, 'schoolFees', schoolSublbl);
+      chk('Bizone (snacks)', bizoneFee(mk), 'bizone', 'term fee');
+      chk('English (Sheetal)', englishFee(mk), 'english', 'installment');
+      if (md.swimmingAttended)     chk('Swimming',     effectiveBase(mk,'swimming',4000),     'swimming',     'attended');
+      if (md.bharatnatyamAttended) chk('Bharatnatyam', effectiveBase(mk,'bharatnatyam',1500), 'bharatnatyam', 'attended');
+      const chessRate_ = effectiveBase(mk, 'chessRate', 500);
+      const chessAmt = (md.chessDates||[]).length * chessRate_;
+      if (chessAmt) chk('Chess', chessAmt, 'chess', `${(md.chessDates||[]).length} classes @ ₹${inr(chessRate_)}`);
+      const skateRate_ = effectiveBase(mk, 'skatingRate', 375);
+      const skateAmt = (md.skatingDates||[]).length * skateRate_;
+      if (skateAmt) chk('Skating', skateAmt, 'skating', `${(md.skatingDates||[]).length} classes @ ₹${inr(skateRate_)}`);
+
+      (md.aaviaMisc||[]).forEach((it,i) => { if (!it.paid) due.push({ label:'Aavia — '+it.text, sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'aaviaMisc', toggleIdx:i }); });
+
+      chk('Sukanya Samriddhi', SUKANYA, 'sukanya', 'flat');
+      chk('Car EMI', carEmiFee(mk), 'carEmi', 'Aug 2022–Jul 2027');
+      const rentBase = effectiveBase(mk, 'rent', rentFee(mk));
+      chk('Rent', rentBase, 'rent', `₹${inr(rentBase)}/mo`);
+
+      (md.groceries||[]).forEach((g,i) => { if (!g.paid) due.push({ label:`${g.vendor} (${g.category})`, sub:g.date||'', amount:g.amount, toggleType:'item', toggleKey:'groceries', toggleIdx:i }); });
+      (md.householdGroceries||[]).forEach((it,i) => { if (!it.paid) due.push({ label:'HH Groceries — '+it.text, sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'householdGroceries', toggleIdx:i }); });
+      (md.householdMisc||[]).forEach((it,i)      => { if (!it.paid) due.push({ label:'HH Misc — '+it.text,      sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'householdMisc',      toggleIdx:i }); });
+      (md.nehaMisc||[]).forEach((it,i)    => { if (!it.paid) due.push({ label:'Neha — '+it.text,    sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'nehaMisc',    toggleIdx:i }); });
+      (md.avishekMisc||[]).forEach((it,i) => { if (!it.paid) due.push({ label:'Avishek — '+it.text, sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'avishekMisc', toggleIdx:i }); });
+
+      if (due.length) result.push({ mk, label: monthLabel(mk), items: due });
+    }
+    mk = addMonths(mk, 1);
+  }
+  return result;
+}
+
+// ── Toggle outstanding item paid ───────────────────────────────────────────
+function toggleOutItem(mk, type, key, idx) {
+  if (type === 'fixed') {
+    startPayment('outFixed', mk, key);
+  } else {
+    startPayment('outItem', mk, key, idx);
+  }
+}
+
+// ── Base override UI ───────────────────────────────────────────────────────
+let baseEditKey = null;
+function startBaseEdit(key) { baseEditKey = key; render(); }
+function cancelBaseEdit()   { baseEditKey = null; render(); }
+function saveBase(key) {
+  const inp = document.getElementById('base-inp-' + key);
+  if (!inp) return;
+  const val = Math.round(Number(inp.value));
+  baseEditKey = null;
+  if (val > 0) {
+    const md = getMD();
+    updateMonth({ bases: { ...(md.bases||{}), [key]: val } });
+  } else { render(); }
+}
+function baseEditControl(key, currentBase, label) {
+  const lbl = label || 'Base';
+  if (baseEditKey === key) {
+    return `<div class="base-row">
+      <span class="base-lbl">${lbl} ₹</span>
+      <input id="base-inp-${key}" class="base-inp" type="number" value="${currentBase}">
+      <button class="base-ok" onclick="saveBase('${key}')">Save</button>
+      <button class="base-cancel" onclick="cancelBaseEdit()">✕</button>
+    </div>`;
+  }
+  return `<div class="base-row">
+    <span class="base-lbl">${lbl} ₹${inr(currentBase)}</span>
+    <button class="base-edit-btn" onclick="startBaseEdit('${key}')" title="Edit base for this month onwards">✎</button>
+  </div>`;
+}
+
+// ── Payment picker ─────────────────────────────────────────────────────────
+function pmChip(method) {
+  const pm = PAY_METHODS.find(m => m.key === method);
+  return pm ? `<span class="pay-chip">${pm.short}</span>` : '';
+}
+function startPayment(type, ...args) {
+  // Determine the item key for restriction lookups (fixed items only)
+  const key = (type === 'fixed') ? args[0] : (type === 'outFixed') ? args[1] : null;
+
+  // Auto-confirm items with exactly one valid method — no picker needed
+  if (key && FIXED_METHOD[key]) {
+    pendingPay = { type, args };
+    confirmPay(FIXED_METHOD[key]);
+    return;
+  }
+
+  // Filter methods: no CC for maids/classes
+  const methods = (type === 'fixed' || type === 'outFixed') && key && NO_CC_KEYS.has(key)
+    ? PAY_METHODS.filter(m => m.key !== 'axisCC' && m.key !== 'scapiaCC')
+    : PAY_METHODS;
+
+  pendingPay = { type, args };
+  document.getElementById('pay-methods').innerHTML =
+    methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
+  document.getElementById('pay-overlay').classList.remove('hidden');
+}
+function confirmPay(method) {
+  if (!pendingPay) return;
+  const { type, args } = pendingPay;
+  pendingPay = null;
+  document.getElementById('pay-overlay').classList.add('hidden');
+
+  if (type === 'fixed') {
+    const [key] = args;
+    const md = getMD();
+    updateMonth({ paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method} });
+  } else if (type === 'misc') {
+    const [cat, idx] = args;
+    captureMiscDraft(cat);
+    const md = getMD();
+    updateMonth({ [cat]:(md[cat]||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) });
+  } else if (type === 'grocery') {
+    const [idx] = args;
+    captureGroceryDraft();
+    const md = getMD();
+    updateMonth({ groceries:(md.groceries||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) });
+  } else if (type === 'outFixed') {
+    const [mk, key] = args;
+    const md = getMDFor(mk);
+    updateMonthFor(mk, { paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method} });
+  } else if (type === 'outItem') {
+    const [mk, cat, idx] = args;
+    const md = getMDFor(mk);
+    updateMonthFor(mk, { [cat]:(md[cat]||[]).map((it,i)=>i===idx?{...it,paid:true,payMethod:method}:it) });
+  }
+}
+function cancelPay() {
+  pendingPay = null;
+  document.getElementById('pay-overlay').classList.add('hidden');
+}
+
+// ── Collapse handling ──────────────────────────────────────────────────────
+function isOpen(id, pending) {
+  const c = uiPrefs.collapsed[id];
+  if (c === undefined) return pending > 0.5;
+  return !c;
+}
+function toggleCollapse(id) {
+  const card = document.querySelector('.card[data-sec="'+id+'"]');
+  if (!card) return;
+  const open = card.classList.toggle('open');
+  card.setAttribute('aria-expanded', open ? 'true' : 'false');
+  uiPrefs.collapsed[id] = !open;
+  saveUI();
+}
+function setAllCollapsed(v) {
+  document.querySelectorAll('.card[data-sec]').forEach(c => { uiPrefs.collapsed[c.dataset.sec] = v; });
+  saveUI();
+  render();
+}
+
+// ── HTML builders ──────────────────────────────────────────────────────────
+function paidBtn(key, paid) {
+  if (paid) {
+    const method = (getMD().payMethod || {})[key];
+    return `<div class="paid-grp"><button class="pbtn paid" onclick="togglePaid('${key}')">Paid</button>${pmChip(method)}</div>`;
+  }
+  return `<button class="pbtn due" onclick="startPayment('fixed','${key}')">Mark paid</button>`;
+}
+function ledgerRow(key, label, sub, amount, paid, controls='') {
+  return `
+<div class="lrow">
+  <div class="lrow-main">
+    <div class="lrow-left">
+      <div class="lrow-label">${esc(label)}</div>
+      ${sub?`<div class="lrow-sub">${sub}</div>`:''}
+    </div>
+    <div class="lrow-right">
+      <span class="lrow-amt">₹${inr(amount)}</span>
+      ${paidBtn(key, paid)}
+    </div>
+  </div>
+  ${controls?`<div class="lrow-ctrl">${controls}</div>`:''}
+</div>`;
+}
+function stepper(onMinus, onPlus, val) {
+  return `<div class="stepper">
+    <button class="sbtn" onclick="${onMinus}" aria-label="decrease">−</button>
+    <span class="sval">${val}</span>
+    <button class="sbtn" onclick="${onPlus}" aria-label="increase">+</button>
+  </div>`;
+}
+function dateChips(dim, dates, toggleFn) {
+  return `<div class="chips">${
+    Array.from({length:dim},(_,i)=>i+1).map(day=>{
+      const on = dates.includes(day);
+      return `<button class="chip${on?' on':''}" onclick="${toggleFn}(${day})">${day}</button>`;
+    }).join('')
+  }</div>`;
+}
+function miscItemList(cat, items) {
+  const total = (items||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const d = miscDrafts[cat]||{};
+  let html = `<div class="misc-add">
+    <input id="m-txt-${cat}" class="misc-txt" type="text" placeholder="what for" value="${esc(d.text||'')}" oninput="captureMiscDraft('${cat}')">
+    <input id="m-amt-${cat}" class="misc-amt" type="number" inputmode="numeric" placeholder="amount" value="${esc(d.amount||'')}" oninput="captureMiscDraft('${cat}')">
+    <button class="add-btn" onclick="addMiscItem('${cat}')">Add</button>
+  </div>`;
+  if ((items||[]).length) {
+    html += (items||[]).map((it,i)=>`
+    <div class="mitem">
+      <div class="mitem-left">
+        <div class="mitem-txt">${esc(it.text)}</div>
+        <div class="mitem-date">${esc(it.date||'')}</div>
+      </div>
+      <div class="mitem-right">
+        <span class="mitem-amt">₹${inr(it.amount)}</span>
+        ${it.paid
+          ? `<div class="paid-grp"><button class="pbtn sm paid" onclick="toggleMiscPaid('${cat}',${i})">Paid</button>${pmChip(it.payMethod)}</div>`
+          : `<button class="pbtn sm due" onclick="startPayment('misc','${cat}',${i})">Mark paid</button>`}
+        <button class="del-btn" onclick="deleteMiscItem('${cat}',${i})" aria-label="delete">×</button>
+      </div>
+    </div>`).join('');
+  }
+  html += `<div class="mtotal">
+    <span class="mtotal-lbl">Section total</span>
+    <span class="mtotal-val">₹${inr(total)}</span>
+  </div>`;
+  return html;
+}
+function sectionCard(id, title, amount, paid, bodyHtml, opts) {
+  opts = opts || {};
+  const pending = Math.max(0, amount - paid);
+  const settled = amount > 0.5 && pending <= 0.5;
+  const open = isOpen(id, pending);
+  const pct = amount > 0 ? Math.min(100, Math.round(paid/amount*100)) : 0;
+  let sub;
+  if (amount <= 0.5)  sub = `<span class="tag-none">Nothing due</span>`;
+  else if (settled)   sub = `<span class="tag-ok">Settled</span>`;
+  else                sub = `<span class="tag-due">₹${inr(pending)} due</span>`;
+  return `<section class="card${open?' open':''}${settled?' settled':''}${opts.span?' span2':''}" data-sec="${id}" aria-expanded="${open?'true':'false'}">
+    <button class="card-hd" onclick="toggleCollapse('${id}')" aria-controls="body-${id}">
+      <span class="chev" aria-hidden="true">›</span>
+      <span class="hd-main">
+        <span class="hd-title">${esc(title)}</span>
+        <span class="hd-sub">${sub}</span>
+      </span>
+      <span class="hd-amt">₹${inr(amount)}</span>
+    </button>
+    <div class="hd-bar"><i style="width:${pct}%"></i></div>
+    <div class="card-body-wrap"><div class="card-body" id="body-${id}">${bodyHtml}</div></div>
+  </section>`;
+}
+
+// ── Main render ────────────────────────────────────────────────────────────
+function render() {
+  const scrollY = window.scrollY;
+
+  const ml = monthLabel(currentMonth);
+  const parts = ml.split(' ');
+  document.getElementById('month-lbl').innerHTML =
+    parts.length===2 ? `${parts[0]} <span class="yr">${parts[1]}</span>` : ml;
+
+  const backBtn = document.querySelector('#month-nav .nav-btn');
+  if (backBtn) backBtn.style.opacity = currentMonth <= MIN_MONTH ? '0.3' : '1';
+
+  const todayBtn = document.getElementById('today-jump');
+  if (todayBtn) todayBtn.classList.toggle('hidden', currentMonth === todayMonthKey());
+
+  if (currentTab === 'outstanding') {
+    renderOutstanding();
+    window.scrollTo(0, scrollY);
+    setSyncState(IN_GAS ? 'ok' : 'off');
+    return;
+  }
+  if (currentTab === 'payments') {
+    renderPayments();
+    window.scrollTo(0, scrollY);
+    setSyncState(IN_GAS ? 'ok' : 'off');
+    return;
+  }
+
+  const md  = getMD();
+  const dim = daysInMonth(currentMonth);
+
+  // --- Maids ---
+  const maidAmounts = MAIDS.map(m => {
+    const base   = effectiveBase(currentMonth, m.key, m.base);
+    const leaves = md.maidLeaves[m.key]??2;
+    return { ...m, base, leaves, amount: maidPayout(base, leaves, dim) };
+  });
+  const japaActive = currentMonth>='2026-08' && currentMonth<='2026-10';
+  const japaDays   = md.japaDaysPresent==null ? defaultJapaDays(currentMonth) : md.japaDaysPresent;
+  const japaAmt    = japaMaidPayout(currentMonth, md.japaDaysPresent);
+
+  // --- Aavia ---
+  const tuition  = schoolTuition(currentMonth);
+  const termFee  = schoolTermFee(currentMonth);
+  const busFee   = schoolBusFee(currentMonth);
+  const schoolTot= tuition + termFee + busFee;
+  const bizone   = bizoneFee(currentMonth);
+  const curMo    = parseInt(currentMonth.split('-')[1]);
+  const isJanPay = curMo === 1;
+  const isFebMar = curMo === 2 || curMo === 3;
+  const isTermMo = curMo === 4 || curMo === 10;
+  const schoolRateBase = effectiveBase(currentMonth, 'schoolRate', 10357);
+  const busBase        = effectiveBase(currentMonth, 'schoolBus',  25150);
+  const bizoneBase     = effectiveBase(currentMonth, 'bizone',     12285);
+  const swimBase  = effectiveBase(currentMonth, 'swimming', 4000);
+  const swimAmt   = md.swimmingAttended ? swimBase : 0;
+  const bharatBase= effectiveBase(currentMonth, 'bharatnatyam', 1500);
+  const bharatAmt = md.bharatnatyamAttended ? bharatBase : 0;
+  const chessRate = effectiveBase(currentMonth, 'chessRate', 500);
+  const skateRate = effectiveBase(currentMonth, 'skatingRate', 375);
+  const chessAmt  = (md.chessDates||[]).length * chessRate;
+  const skateAmt  = (md.skatingDates||[]).length * skateRate;
+  const english   = englishFee(currentMonth);
+  const aaviaMiscTot  = (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const aaviaMiscPaid = (md.aaviaMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
+  const aaviaTot  = schoolTot+bizone+swimAmt+bharatAmt+chessAmt+skateAmt+english+aaviaMiscTot;
+  const aaviaPaid =
+    (md.paid.schoolFees?schoolTot:0)+(md.paid.bizone?bizone:0)+
+    (md.paid.swimming?swimAmt:0)+(md.paid.bharatnatyam?bharatAmt:0)+
+    (md.paid.chess?chessAmt:0)+(md.paid.skating?skateAmt:0)+
+    (md.paid.english?english:0)+aaviaMiscPaid;
+
+  // --- Fixed ---
+  const carEmi    = carEmiFee(currentMonth);
+  const rent      = effectiveBase(currentMonth, 'rent', rentFee(currentMonth));
+  const fixedTot  = SUKANYA + carEmi + rent;
+  const fixedPaid = (md.paid.sukanya?SUKANYA:0)+(md.paid.carEmi?carEmi:0)+(md.paid.rent?rent:0);
+
+  // --- Household ---
+  const groceries   = md.groceries||[];
+  const groceryTot  = groceries.reduce((s,g)=>s+Number(g.amount||0),0);
+  const groceryPaid = groceries.reduce((s,g)=>g.paid?s+Number(g.amount||0):s,0);
+  const bySagar     = groceries.filter(g=>g.vendor==='Sagar').reduce((s,g)=>s+Number(g.amount||0),0);
+  const byAjit      = groceries.filter(g=>g.vendor==='Ajit').reduce((s,g)=>s+Number(g.amount||0),0);
+  const hhGrocTot   = (md.householdGroceries||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const hhGrocPaid  = (md.householdGroceries||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
+  const hhMiscTot   = (md.householdMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const hhMiscPaid  = (md.householdMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
+  const hhTot       = groceryTot + hhGrocTot + hhMiscTot;
+  const hhPaid      = groceryPaid + hhGrocPaid + hhMiscPaid;
+
+  // --- Neha / Avishek ---
+  const nehaTot  = (md.nehaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const avishTot = (md.avishekMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const nehaPaid = (md.nehaMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
+  const avishPd  = (md.avishekMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
+
+  // --- Grand totals ---
+  const maidsTot   = maidAmounts.reduce((s,m)=>s+m.amount,0);
+  const maidsPaid  = maidAmounts.reduce((s,m)=>s+(md.paid[m.key]?m.amount:0),0) + (md.paid.japaMaid?japaAmt:0);
+  const maidsSecTot = maidsTot + japaAmt;
+  const grandTot   = maidsTot+japaAmt+aaviaTot+SUKANYA+carEmi+rent+hhTot+nehaTot+avishTot;
+  const paidTot    = maidsPaid + aaviaPaid + fixedPaid + hhPaid + nehaPaid + avishPd;
+  const pendingTot = grandTot - paidTot;
+  const pct = grandTot>0 ? Math.round(paidTot/grandTot*100) : 0;
+
+  // --- School sub-label ---
+  const schoolSub = isFebMar
+    ? 'included in January payment'
+    : [
+        tuition > 0 ? `tuition ₹${inr(tuition)}${isJanPay?' (Jan+Feb+Mar)':''}` : null,
+        termFee ? `term ₹${inr(termFee)}` : null,
+        busFee  ? `bus ₹${inr(busFee)}` : null,
+      ].filter(Boolean).join(' + ');
+
+  // ── Hero ────────────────────────────────────────────────────────────
+  document.getElementById('summary').innerHTML = `
+<div class="hero">
+  <div class="hero-row">
+    <div class="hero-lead">
+      <div class="hero-lbl">Still to pay</div>
+      <div class="hero-num ${pendingTot>0.5?'':'g'}">₹${inr(pendingTot)}</div>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><div class="k">Owed</div><div class="v">₹${inr(grandTot)}</div></div>
+      <div class="hstat"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
+    </div>
+  </div>
+  <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+  <div class="hero-foot">
+    <span><span class="mono">${pct}%</span> settled</span>
+    <span>${pendingTot<=0.5?'All cleared 🎉':`<span class="mono">₹${inr(paidTot)}</span> of <span class="mono">₹${inr(grandTot)}</span>`}</span>
+  </div>
+</div>`;
+
+  // ── Section bodies ──────────────────────────────────────────────────
+  // Maids
+  let maidsBody = '';
+  maidAmounts.forEach(m => {
+    maidsBody += ledgerRow(m.key, m.label,
+      `base ₹${inr(m.base)} · ${m.leaves} leave${m.leaves===1?'':'s'} this month`,
+      m.amount, !!md.paid[m.key],
+      `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${m.key}',-1)`,`changeLeaves('${m.key}',1)`,m.leaves)}</div>${baseEditControl(m.key, m.base)}`
+    );
+  });
+  maidsBody += ledgerRow('japaMaid','Japa Maid',
+    japaActive ? `live-in · flat ₹28,000/mo, prorated · ${japaDays} of ${dim} days` : 'not in service this month',
+    japaAmt, !!md.paid.japaMaid,
+    japaActive ? `<div class="field"><span class="field-lbl">Days present</span>${stepper('changeJapaDays(-1)','changeJapaDays(1)',japaDays)}</div>` : ''
+  );
+
+  // Aavia
+  let aaviaBody = `<div class="sublbl">School</div>`;
+  aaviaBody += ledgerRow('schoolFees','P G Garodia School', schoolSub, schoolTot, !!md.paid.schoolFees,
+    baseEditControl('schoolRate', schoolRateBase, 'Tuition Base') +
+    (isTermMo ? baseEditControl('schoolBus', busBase, 'Bus Base') : ''));
+  aaviaBody += ledgerRow('bizone','Bizone (snacks)',
+    bizone ? `₹${inr(bizone)} this term` : 'nothing due this month',
+    bizone, !!md.paid.bizone,
+    isTermMo ? baseEditControl('bizone', bizoneBase, 'Bizone Base') : '');
+  aaviaBody += `<div class="sublbl">Classes</div>`;
+  aaviaBody += ledgerRow('english','English (Sheetal)', english?'lump-sum installment due':'no payment due this month', english, !!md.paid.english);
+  aaviaBody += ledgerRow('swimming','Swimming',`₹${inr(swimBase)} flat if attended this month`, swimAmt, !!md.paid.swimming,
+    `<label class="chk-row"><input type="checkbox" ${md.swimmingAttended?'checked':''} onchange="toggleSwimming()"> Attended this month</label>${baseEditControl('swimming', swimBase)}`);
+  aaviaBody += ledgerRow('bharatnatyam','Bharatnatyam',`₹${inr(bharatBase)} flat if attended this month`, bharatAmt, !!md.paid.bharatnatyam,
+    `<label class="chk-row"><input type="checkbox" ${md.bharatnatyamAttended?'checked':''} onchange="toggleBharatnatyam()"> Attended this month</label>${baseEditControl('bharatnatyam', bharatBase)}`);
+  aaviaBody += ledgerRow('chess','Chess',
+    `₹${inr(chessRate)} × ${(md.chessDates||[]).length} class${(md.chessDates||[]).length===1?'':'es'}`,
+    chessAmt, !!md.paid.chess,
+    dateChips(dim, md.chessDates||[], 'toggleChessDate') + baseEditControl('chessRate', chessRate, 'Per class'));
+  aaviaBody += ledgerRow('skating','Skating',
+    `₹${inr(skateRate)} × ${(md.skatingDates||[]).length} class${(md.skatingDates||[]).length===1?'':'es'}`,
+    skateAmt, !!md.paid.skating,
+    dateChips(dim, md.skatingDates||[], 'toggleSkatingDate') + baseEditControl('skatingRate', skateRate, 'Per class'));
+  aaviaBody += `<div class="sublbl">Miscellaneous</div>${miscItemList('aaviaMisc', md.aaviaMisc)}`;
+
+  // Fixed
+  let fixedBody = '';
+  fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',SUKANYA,!!md.paid.sukanya);
+  fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi);
+  fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, baseEditControl('rent', rent));
+
+  // Household
+  const gDraftV = gDraft.vendor; const gDraftC = gDraft.category;
+  let hhBody = `<div class="sublbl">Veges / Fruits — Sagar &amp; Ajit</div>
+    <div class="vendor-row">
+      <div class="vendor-item"><div class="v-lbl">Sagar</div><div class="v-val">₹${inr(bySagar)}</div></div>
+      <div class="vendor-item"><div class="v-lbl">Ajit</div><div class="v-val">₹${inr(byAjit)}</div></div>
+    </div>
+    <div class="g-add">
+      <select id="g-vendor" class="sel" onchange="gDraft.vendor=this.value">
+        <option${gDraftV==='Sagar'?' selected':''}>Sagar</option>
+        <option${gDraftV==='Ajit'?' selected':''}>Ajit</option>
+      </select>
+      <select id="g-cat" class="sel" onchange="gDraft.category=this.value">
+        <option value="veges"${gDraftC==='veges'?' selected':''}>veges</option>
+        <option value="fruits"${gDraftC==='fruits'?' selected':''}>fruits</option>
+        <option value="other"${gDraftC==='other'?' selected':''}>other</option>
+      </select>
+      <input id="g-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount" value="${esc(gDraft.amount)}" oninput="gDraft.amount=this.value">
+      <button class="add-btn" onclick="addGrocery()">Add</button>
+    </div>`;
+  groceries.forEach((g,i)=>{
+    hhBody += `<div class="g-item">
+      <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div><div class="g-item-date">${esc(g.date||'')}</div></div>
+      <div class="g-item-right">
+        <span class="g-item-amt">₹${inr(g.amount)}</span>
+        ${g.paid
+          ? `<div class="paid-grp"><button class="pbtn sm paid" onclick="toggleGroceryPaid(${i})">Paid</button>${pmChip(g.payMethod)}</div>`
+          : `<button class="pbtn sm due" onclick="startPayment('grocery',${i})">Mark paid</button>`}
+        <button class="del-btn" onclick="deleteGrocery(${i})" aria-label="delete">×</button>
+      </div>
+    </div>`;
+  });
+  hhBody += `<div class="sublbl">Household Groceries</div>${miscItemList('householdGroceries', md.householdGroceries)}`;
+  hhBody += `<div class="sublbl">Household Miscellaneous</div>${miscItemList('householdMisc', md.householdMisc)}`;
+
+  // Neha / Avishek
+  const nehaBody  = miscItemList('nehaMisc', md.nehaMisc);
+  const avishBody = miscItemList('avishekMisc', md.avishekMisc);
+
+  // ── Assemble ────────────────────────────────────────────────────────
+  let html = `<div class="toolbar">
+    <button class="tbtn" onclick="setAllCollapsed(false)">Expand all</button>
+    <button class="tbtn" onclick="setAllCollapsed(true)">Collapse all</button>
+  </div><div id="sections">`;
+  html += sectionCard('maids',    'Maids',     maidsSecTot, maidsPaid, maidsBody);
+  html += sectionCard('aavia',    'Aavia',     aaviaTot,    aaviaPaid, aaviaBody);
+  html += sectionCard('fixed',    'Fixed',     fixedTot,    fixedPaid, fixedBody);
+  html += sectionCard('household','Household', hhTot,       hhPaid,    hhBody, { span:true });
+  html += sectionCard('neha',     'Neha',      nehaTot,     nehaPaid,  nehaBody);
+  html += sectionCard('avishek',  'Avishek',   avishTot,    avishPd,   avishBody);
+  html += `</div>`;
+
+  document.getElementById('app-body').innerHTML = html;
+  window.scrollTo(0, scrollY);
+  setSyncState(IN_GAS ? 'ok' : 'off');
+}
+
+// ── Payments render ────────────────────────────────────────────────────────
+function renderPayments() {
+  const md  = getMD();
+  const dim = daysInMonth(currentMonth);
+  const allPaid = [];
+
+  const addFixed = (label, amount, key) => {
+    if (md.paid[key] && amount > 0)
+      allPaid.push({ label, amount, method:(md.payMethod||{})[key]||null });
+  };
+
+  // Maids
+  MAIDS.forEach(m => {
+    const base   = effectiveBase(currentMonth, m.key, m.base);
+    const leaves = md.maidLeaves[m.key] ?? 2;
+    addFixed(m.label, maidPayout(base, leaves, dim), m.key);
+  });
+  const japaActive = currentMonth >= '2026-08' && currentMonth <= '2026-10';
+  if (japaActive) addFixed('Japa Maid', japaMaidPayout(currentMonth, md.japaDaysPresent), 'japaMaid');
+
+  // Aavia — School
+  const schoolTot = schoolTuition(currentMonth) + schoolTermFee(currentMonth) + schoolBusFee(currentMonth);
+  if (schoolTot) addFixed('PG Garodia School', schoolTot, 'schoolFees');
+  const bz = bizoneFee(currentMonth); if (bz) addFixed('Bizone', bz, 'bizone');
+  const en = englishFee(currentMonth); if (en) addFixed('English (Sheetal)', en, 'english');
+  if (md.swimmingAttended)     addFixed('Swimming',     effectiveBase(currentMonth,'swimming',4000),     'swimming');
+  if (md.bharatnatyamAttended) addFixed('Bharatnatyam', effectiveBase(currentMonth,'bharatnatyam',1500), 'bharatnatyam');
+  const chessAmt = (md.chessDates||[]).length * effectiveBase(currentMonth,'chessRate',500);
+  if (chessAmt)  addFixed('Chess',   chessAmt,  'chess');
+  const skateAmt = (md.skatingDates||[]).length * effectiveBase(currentMonth,'skatingRate',375);
+  if (skateAmt)  addFixed('Skating', skateAmt, 'skating');
+
+  // Fixed
+  addFixed('Sukanya Samriddhi', SUKANYA, 'sukanya');
+  const ce = carEmiFee(currentMonth); if (ce) addFixed('Car EMI', ce, 'carEmi');
+  addFixed('Rent', effectiveBase(currentMonth,'rent',rentFee(currentMonth)), 'rent');
+
+  // Array items
+  const pushItems = (arr, labelFn) =>
+    (arr||[]).filter(it=>it.paid).forEach(it => allPaid.push({ label:labelFn(it), amount:it.amount, method:it.payMethod||null }));
+  pushItems(md.aaviaMisc,           it=>'Aavia — '+it.text);
+  pushItems(md.groceries,           g =>g.vendor+' ('+g.category+')');
+  pushItems(md.householdGroceries,  it=>'HH Groceries — '+it.text);
+  pushItems(md.householdMisc,       it=>'HH Misc — '+it.text);
+  pushItems(md.nehaMisc,            it=>'Neha — '+it.text);
+  pushItems(md.avishekMisc,         it=>'Avishek — '+it.text);
+
+  // Group by method
+  const byMethod = {};
+  const unknown  = [];
+  allPaid.forEach(it => it.method ? (byMethod[it.method] = byMethod[it.method]||[], byMethod[it.method].push(it)) : unknown.push(it));
+
+  const totalPaid = allPaid.reduce((s,it) => s+it.amount, 0);
+
+  document.getElementById('summary').innerHTML = `
+<div class="hero">
+  <div class="hero-row">
+    <div class="hero-lead">
+      <div class="hero-lbl">Paid this month</div>
+      <div class="hero-num g">₹${inr(totalPaid)}</div>
+    </div>
+    <div class="hero-stats">
+      ${PAY_METHODS.filter(m=>byMethod[m.key]?.length).map(m=>{
+        const tot=(byMethod[m.key]||[]).reduce((s,it)=>s+it.amount,0);
+        return `<div class="hstat"><div class="k">${m.short}</div><div class="v g">₹${inr(tot)}</div></div>`;
+      }).join('')}
+    </div>
+  </div>
+  <div class="hero-foot" style="margin-top:14px"><span>${allPaid.length} payment${allPaid.length===1?'':'s'} recorded</span><span></span></div>
+</div>`;
+
+  if (!allPaid.length) {
+    document.getElementById('app-body').innerHTML =
+      `<div class="empty-state"><div class="big">💳</div><div class="msg">No payments yet</div><div class="sub">Mark items paid in the Ledger tab to see them here.</div></div>`;
+    return;
+  }
+
+  const itemRows = items => items.map(it=>`
+    <div class="out-item">
+      <div class="lrow-left"><div class="out-item-name">${esc(it.label)}</div></div>
+      <div class="out-item-right"><span class="out-amt" style="color:var(--green)">₹${inr(it.amount)}</span></div>
+    </div>`).join('');
+
+  let html = `<div style="height:16px"></div>`;
+
+  PAY_METHODS.forEach(pm => {
+    const items = byMethod[pm.key];
+    if (!items?.length) return;
+    const total = items.reduce((s,it)=>s+it.amount,0);
+    html += `<section class="card open" style="margin-bottom:14px">
+      <div class="card-hd static">
+        <span class="hd-main">
+          <span class="hd-title">${pm.label}</span>
+          <span class="hd-sub"><span class="tag-ok">${items.length} item${items.length===1?'':'s'}</span></span>
+        </span>
+        <span class="hd-amt">₹${inr(total)}</span>
+      </div>
+      <div class="card-body" style="padding-bottom:8px">
+        ${itemRows(items)}
+        <div class="pmth-total-row">
+          <span class="pmth-total-lbl">${pm.label} total</span>
+          <span class="pmth-total-val">₹${inr(total)}</span>
+        </div>
+      </div>
+    </section>`;
+  });
+
+  if (unknown.length) {
+    const total = unknown.reduce((s,it)=>s+it.amount,0);
+    html += `<section class="card open" style="margin-bottom:14px">
+      <div class="card-hd static">
+        <span class="hd-main">
+          <span class="hd-title">Method not recorded</span>
+          <span class="hd-sub"><span class="tag-none">pre-existing paid data</span></span>
+        </span>
+        <span class="hd-amt">₹${inr(total)}</span>
+      </div>
+      <div class="card-body" style="padding-bottom:8px">${itemRows(unknown)}</div>
+    </section>`;
+  }
+
+  document.getElementById('app-body').innerHTML = html;
+}
+
+// ── Outstanding render ─────────────────────────────────────────────────────
+function renderOutstanding() {
+  const groups    = getOutstandingItems();
+  const grandDue  = groups.reduce((s,g) => s + g.items.reduce((ss,it) => ss+it.amount, 0), 0);
+  const monthCount = groups.length;
+  const oldest = groups.length ? monthShort(groups[0].mk) : '—';
+  const maxTotal = groups.reduce((mx,g)=>Math.max(mx, g.items.reduce((s,it)=>s+it.amount,0)),0);
+
+  document.getElementById('summary').innerHTML = `
+<div class="hero">
+  <div class="hero-row">
+    <div class="hero-lead">
+      <div class="hero-lbl">Total outstanding</div>
+      <div class="hero-num ${grandDue>0.5?'':'g'}">₹${inr(grandDue)}</div>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><div class="k">Months</div><div class="v">${monthCount}</div></div>
+      <div class="hstat"><div class="k">Oldest</div><div class="v" style="font-size:14px">${oldest}</div></div>
+    </div>
+  </div>
+  <div class="hero-foot" style="margin-top:14px"><span>Dues carried since March 2026</span><span></span></div>
+</div>`;
+
+  if (!groups.length) {
+    document.getElementById('app-body').innerHTML =
+      `<div class="empty-state"><div class="big">🎉</div><div class="msg">All settled</div><div class="sub">No outstanding dues since March 2026.</div></div>`;
+    return;
+  }
+
+  let html = `<div style="height:16px"></div>`;
+  groups.forEach(g => {
+    const mTotal = g.items.reduce((s,it) => s+it.amount, 0);
+    const w = maxTotal>0 ? Math.round(mTotal/maxTotal*100) : 0;
+    let items = '';
+    g.items.forEach(it => {
+      items += `<div class="out-item">
+        <div class="lrow-left">
+          <div class="out-item-name">${esc(it.label)}</div>
+          ${it.sub ? `<div class="out-item-sub">${esc(it.sub)}</div>` : ''}
+        </div>
+        <div class="out-item-right">
+          <span class="out-amt">₹${inr(it.amount)}</span>
+          <button class="pbtn act sm" onclick="toggleOutItem('${g.mk}','${it.toggleType}','${it.toggleKey}',${it.toggleIdx})">Mark paid</button>
+        </div>
+      </div>`;
+    });
+    html += `<section class="card open ogroup">
+      <div class="card-hd static">
+        <span class="hd-main">
+          <span class="hd-title">${esc(g.label)}</span>
+          <span class="hd-sub"><span class="tag-due">${g.items.length} item${g.items.length===1?'':'s'} due</span></span>
+        </span>
+        <span class="hd-amt r">₹${inr(mTotal)}</span>
+      </div>
+      <div class="hd-bar"><i style="width:${w}%;background:var(--maroon-soft)"></i></div>
+      <div class="card-body" style="padding-bottom:8px">${items}</div>
+    </section>`;
+  });
+
+  document.getElementById('app-body').innerHTML = html;
+}
+
+// ── Self-update (Capacitor + capgo updater) ────────────────────────────────
+// Checks version.json on GitHub; if a newer bundle exists, downloads and
+// switches to it. Data (localStorage) is untouched. Silent when offline.
+async function checkForAppUpdate() {
+  if (!UPDATE_URL.startsWith('https://')) return;
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+  let Updater;
+  try { Updater = cap.registerPlugin('CapacitorUpdater'); } catch (e) { return; }
+  try { await Updater.notifyAppReady(); } catch (e) {}
+  try {
+    const res  = await fetch(UPDATE_URL + '?t=' + Date.now(), { cache:'no-store' });
+    const info = await res.json();
+    if (!info || !info.version || !info.url) return;
+    if (cmpVer(info.version, APP_VERSION) <= 0) return; // already current
+    setSyncState('busy');
+    const bundle = await Updater.download({ url: info.url, version: info.version });
+    await Updater.set(bundle); // reloads the app on the new bundle
+  } catch (e) {
+    setSyncState(IN_GAS ? 'ok' : 'off'); // update failed — keep running current version
+  }
+}
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) { const d = (pa[i]||0) - (pb[i]||0); if (d) return d; }
+  return 0;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+loadLocal();
+loadUI();
+render();
+document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
+
+if (IN_GAS) pullFromSheets();
+checkForAppUpdate();
+
+// Re-pull shared data whenever the app comes back to the foreground,
+// so changes made on another phone show up.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && IN_GAS) pullFromSheets();
+});
+</script>
+</body>
+</html>
