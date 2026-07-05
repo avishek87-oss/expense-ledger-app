@@ -415,7 +415,7 @@ const FIXED_METHOD = { rent:'avishekBank', sukanya:'nehaBank', carEmi:'avishekBa
 const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','chess','skating','swimming','bharatnatyam']);
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1609,10 +1609,32 @@ function showApkGate(apkUrl, installedVer, needVer) {
   const g = document.getElementById('apk-gate'); if (!g) return;
   const vd = document.getElementById('apk-gate-ver');
   if (vd) vd.textContent = (installedVer ? ('Installed v' + installedVer + '  →  ') : '') + 'Required v' + (needVer || '');
+  const msg = document.getElementById('apk-gate-msg');
   const btn = document.getElementById('apk-gate-btn');
-  if (btn) btn.onclick = () => {
+  const browserFallback = () => {
     const B = getNativePlugin('Browser');
     if (B && B.open) B.open({ url: apkUrl }); else location.href = apkUrl;
+  };
+  if (btn) btn.onclick = async () => {
+    const Apk = getNativePlugin('ApkInstaller');
+    if (!Apk || !Apk.installFromUrl) { browserFallback(); return; } // older shell → browser download
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Downloading…';
+    try {
+      const r = await Apk.installFromUrl({ url: apkUrl });
+      if (r && r.needsPermission) {
+        if (msg) msg.textContent = 'Allow installing apps for Household Ledger, then tap Download again.';
+        btn.textContent = label;
+      } else {
+        btn.textContent = 'Opening installer…';
+      }
+    } catch (e) {
+      browserFallback();      // download failed → let the browser handle it
+      btn.textContent = label;
+    } finally {
+      btn.disabled = false;
+    }
   };
   hideLaunch();
   g.classList.remove('hidden');
