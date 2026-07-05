@@ -370,7 +370,7 @@ const FIXED_METHOD = { rent:'avishekBank', sukanya:'nehaBank', carEmi:'avishekBa
 const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','chess','skating','swimming','bharatnatyam']);
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -662,10 +662,24 @@ let auth = null; // { email, idToken }
 function loadAuth() { try { const r = localStorage.getItem(AUTH_KEY); if (r) auth = JSON.parse(r); } catch(e){} }
 function saveAuth() { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
 
+// Get a native Capacitor plugin in a bundler-less app: the injected bridge
+// exposes plugins on Capacitor.Plugins; registerPlugin only exists with the
+// full @capacitor/core JS bundle, so try both.
+function getNativePlugin(name) {
+  const c = window.Capacitor;
+  if (!c) return null;
+  try {
+    if (c.Plugins && c.Plugins[name]) return c.Plugins[name];
+    if (typeof c.registerPlugin === 'function') return c.registerPlugin(name);
+  } catch (e) {}
+  return null;
+}
+
 let slPlugin = null, slInited = false;
 async function ensureSocialLogin() {
   if (!IS_NATIVE) return null;
-  if (!slPlugin) { try { slPlugin = window.Capacitor.registerPlugin('SocialLogin'); } catch(e) { return null; } }
+  if (!slPlugin) slPlugin = getNativePlugin('SocialLogin');
+  if (!slPlugin) return null;
   if (!slInited) {
     await slPlugin.initialize({ google: { webClientId: GOOGLE_WEB_CLIENT_ID } });
     slInited = true;
@@ -678,7 +692,11 @@ async function googleSignIn() {
   lastLoginError = '';
   try {
     const SL = await ensureSocialLogin();
-    if (!SL) { lastLoginError = 'Sign-in plugin unavailable'; return false; }
+    if (!SL) {
+      const names = (window.Capacitor && window.Capacitor.Plugins) ? Object.keys(window.Capacitor.Plugins).join(',') : 'none';
+      lastLoginError = 'Sign-in plugin unavailable (registered: ' + names + ')';
+      return false;
+    }
     const res = await SL.login({ provider:'google', options:{ scopes:['email','profile'] } });
     const r = (res && res.result) || res || {};
     const idToken = r.idToken || (r.authentication && r.authentication.idToken);
@@ -1491,8 +1509,8 @@ async function checkForAppUpdate() {
   if (!UPDATE_URL.startsWith('https://')) return;
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
-  let Updater;
-  try { Updater = cap.registerPlugin('CapacitorUpdater'); } catch (e) { updStatus('upd: no plugin'); return; }
+  const Updater = getNativePlugin('CapacitorUpdater');
+  if (!Updater) { updStatus('upd: no plugin'); return; }
   try { await Updater.notifyAppReady(); } catch (e) {}
   try {
     updStatus('checking update…');
