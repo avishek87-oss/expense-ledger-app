@@ -5,6 +5,12 @@
   "plugins": {
     "CapacitorUpdater": {
       "autoUpdate": false
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#f1ece0",
+      "showSpinner": false,
+      "splashFullScreen": true
     }
   }
 }
