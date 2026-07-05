@@ -170,6 +170,8 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .mitem-txt{font-size:15px;color:var(--ink)}
 .g-item-txt{font-family:var(--sans);font-size:14px;color:var(--ink-soft)}
 .mitem-date,.g-item-date{font-family:var(--sans);font-size:12px;color:var(--faint);margin-top:2px}
+.misc-date{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;color:var(--ink);min-height:44px;font-family:var(--sans)}
+.item-date-inp{border:none;background:none;color:var(--muted);font-family:var(--sans);padding:2px 0;margin-top:1px;min-height:26px}
 .mitem-right,.g-item-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .mitem-amt,.g-item-amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
 .del-btn{background:none;border:none;color:var(--faint);font-size:24px;cursor:pointer;padding:0 6px;min-height:44px;line-height:1;-webkit-tap-highlight-color:transparent;transition:color .15s}
@@ -185,7 +187,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .vendor-item .v-val{font-family:var(--mono);font-size:17px;margin-top:3px;font-variant-numeric:tabular-nums}
 
 /* ── Base override ── */
-.base-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.base-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end}
 .base-lbl{font-family:var(--sans);font-size:14px;color:var(--muted)}
 .base-edit-btn{background:none;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:4px 8px;line-height:1;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent;transition:color .15s}
 .base-edit-btn:hover{color:var(--ink)}
@@ -238,6 +240,41 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 #launch-overlay.hidden{opacity:0;pointer-events:none}
 #apk-gate.hidden{display:none!important}
 #apk-gate-btn:active{filter:brightness(1.25)}
+/* Hamburger + drawer */
+#hmb{background:none;border:none;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;margin-right:2px;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent}
+.menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:350;display:flex}
+.menu-overlay.hidden{display:none}
+#menu-panel{background:var(--bg);width:88%;max-width:400px;height:100%;overflow-y:auto;box-shadow:2px 0 24px rgba(31,42,36,.18);display:flex;flex-direction:column}
+#menu-bar{position:sticky;top:0;background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);z-index:1}
+#menu-title{font-family:var(--serif);font-size:18px;font-weight:600}
+#menu-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent}
+#menu-content{padding:4px 14px 48px}
+.menu-h{font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin:18px 4px 10px}
+.cc-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.cc-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+.cc-name{font-family:var(--serif);font-size:17px;font-weight:600}
+.cc-out{font-family:var(--mono);font-size:18px;font-weight:600;white-space:nowrap}
+.cc-out.due{color:var(--maroon)} .cc-out.ok{color:var(--green)}
+.cc-out small{font-family:var(--sans);font-size:10px;font-weight:400;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.cc-cyc{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.cc-cyc-win{font-family:var(--sans);font-size:14px;color:var(--ink)}
+.cc-cyc-sub{font-family:var(--sans);font-size:12px;margin-top:2px;color:var(--muted)}
+.cc-cyc-sub.over{color:var(--maroon)} .cc-cyc-sub.due{color:#a9782f} .cc-cyc-sub.ok{color:var(--green)} .cc-cyc-sub.cur{color:var(--muted)}
+.cc-cyc-amt{font-family:var(--mono);font-size:15px;font-weight:600;white-space:nowrap}
+.cc-empty{font-family:var(--sans);font-size:13px;color:var(--faint);padding:8px 0}
+.cc-pays{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.cc-pay{display:flex;align-items:center;justify-content:space-between;font-family:var(--sans);font-size:12.5px;color:var(--green);padding:2px 0}
+.cc-del{background:none;border:none;color:var(--faint);font-size:14px;cursor:pointer;min-height:32px;min-width:32px;-webkit-tap-highlight-color:transparent}
+.cc-form{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.cc-date{border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);min-height:44px}
+.cc-form .misc-amt{width:auto;flex:1;min-width:90px}
+.ms-month{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow)}
+.ms-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.ms-head span:first-child{font-family:var(--serif);font-size:16px;font-weight:600}
+.ms-total{font-family:var(--mono);font-size:16px;font-weight:600}
+.ms-rows{display:flex;flex-direction:column;gap:4px}
+.ms-row{display:flex;justify-content:space-between;font-family:var(--sans);font-size:13.5px;color:var(--ink-soft)}
+.ms-row span:last-child{font-family:var(--mono)}
 .login-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
 .login-overlay.hidden{display:none}
 .login-box{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:36px 28px;width:100%;max-width:360px;text-align:center}
@@ -254,8 +291,8 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pmth-btn:hover{border-color:var(--ink);background:#fff}
 .pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
 /* Method chip */
-.paid-grp{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.pay-chip{font-family:var(--sans);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:999px;background:var(--green);color:var(--cream);white-space:nowrap}
+.paid-grp{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.pay-chip{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap}
 /* Payments tab */
 .pmth-total-row{display:flex;align-items:baseline;justify-content:space-between;padding:11px 0 5px;border-top:1px solid var(--line);margin-top:2px}
 .pmth-total-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
@@ -305,6 +342,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 <div id="hdr">
   <div id="hdr-inner">
     <div id="hdr-top">
+      <button id="hmb" onclick="openMenu()" aria-label="Menu">☰</button>
       <h1>Household Ledger<span class="sub">Avishek Family</span></h1>
       <div id="sync-chip" title="Your data is saved on this device">
         <span id="sync-dot"></span>
@@ -330,6 +368,16 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   <div id="app-body"></div>
   <footer>Household Ledger · <span id="app-ver"></span> · synced to Google Sheet</footer>
 </main>
+
+<div id="menu-overlay" class="menu-overlay hidden" onclick="closeMenu()">
+  <aside id="menu-panel" onclick="event.stopPropagation()">
+    <div id="menu-bar">
+      <span id="menu-title">Menu</span>
+      <button id="menu-close" onclick="closeMenu()" aria-label="Close">✕</button>
+    </div>
+    <div id="menu-content"></div>
+  </aside>
+</div>
 
 <div id="login-overlay" class="login-overlay hidden">
   <div class="login-box">
@@ -414,8 +462,15 @@ const FIXED_METHOD = { rent:'avishekBank', sukanya:'nehaBank', carEmi:'avishekBa
 // Items that cannot use credit cards — picker shows only bank/cash options
 const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','chess','skating','swimming','bharatnatyam']);
 
+// Credit-card billing cycles. cycle runs [startDay .. endDay(next month)];
+// the statement closes on endDay and the bill is due on dueDay of the month after.
+const CC_CYCLES = {
+  axisCC:   { label:'Axis CC',   short:'Axis',   startDay:19, endDay:18, dueDay:7  },
+  scapiaCC: { label:'Scapia CC', short:'Scapia', startDay:25, endDay:24, dueDay:13 },
+};
+
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -435,7 +490,7 @@ let currentMonth = todayMonthKey();
 let currentTab = 'ledger';
 let syncTimer = null;
 let uiPrefs = { collapsed: {} };
-let gDraft = { vendor:'Sagar', category:'veges', amount:'' };
+let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
 let miscDrafts = {};
 let pendingPay = null;
 
@@ -460,8 +515,14 @@ function emptyMonth() {
     avishekMisc:[],
     paid:{},
     payMethod:{},
+    payDate:{},
     bases:{}
   };
+}
+// Credit-card bill payments (top-level, cross-month). Rides in the synced blob.
+function getCcPayments() {
+  const c = appState.ccPayments || {};
+  return { axisCC: c.axisCC || [], scapiaCC: c.scapiaCC || [] };
 }
 
 function getMD()        { return getMDFor(currentMonth); }
@@ -653,15 +714,20 @@ function captureGroceryDraft() {
   const v=document.getElementById('g-vendor'); if(v) gDraft.vendor=v.value;
   const c=document.getElementById('g-cat');    if(c) gDraft.category=c.value;
   const a=document.getElementById('g-amt');    if(a) gDraft.amount=a.value;
+  const d=document.getElementById('g-date');   if(d) gDraft.date=d.value;
 }
 function addGrocery() {
   captureGroceryDraft();
   const amt = Number(gDraft.amount);
   if (!amt) return;
   const md = getMD();
-  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date:today(), paid:false };
-  gDraft.amount='';
+  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date:gDraft.date||today(), paid:false };
+  gDraft.amount=''; gDraft.date='';
   updateMonth({ groceries:[...(md.groceries||[]),entry] });
+}
+function editGroceryDate(i, val) {
+  const md = getMD();
+  updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
 }
 function toggleGroceryPaid(i) {
   // Only called to UNMARK; marking goes through startPayment
@@ -679,6 +745,7 @@ function deleteGrocery(i) {
 function captureMiscDraft(cat) {
   const t=document.getElementById(`m-txt-${cat}`); if(t){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].text=t.value; }
   const a=document.getElementById(`m-amt-${cat}`); if(a){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].amount=a.value; }
+  const d=document.getElementById(`m-date-${cat}`); if(d){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].date=d.value; }
 }
 function addMiscItem(cat) {
   captureMiscDraft(cat);
@@ -687,8 +754,13 @@ function addMiscItem(cat) {
   const amt  = Number(d.amount||0);
   if (!text || !amt) return;
   const md = getMD();
-  miscDrafts[cat] = { text:'', amount:'' };
-  updateMonth({ [cat]:[...(md[cat]||[]),{ text, amount:amt, paid:false, date:today() }] });
+  const date = d.date || today();
+  miscDrafts[cat] = { text:'', amount:'', date:'' };
+  updateMonth({ [cat]:[...(md[cat]||[]),{ text, amount:amt, paid:false, date }] });
+}
+function editMiscDate(cat, i, val) {
+  const md = getMD();
+  updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
 }
 function toggleMiscPaid(cat,i) {
   // Only called to UNMARK; marking goes through startPayment
@@ -945,15 +1017,15 @@ function baseEditControl(key, currentBase, label) {
     </div>`;
   }
   return `<div class="base-row">
-    <span class="base-lbl">${lbl} ₹${inr(currentBase)}</span>
     <button class="base-edit-btn" onclick="startBaseEdit('${key}')" title="Edit base for this month onwards">✎</button>
+    <span class="base-lbl">${lbl} ₹${inr(currentBase)}</span>
   </div>`;
 }
 
 // ── Payment picker ─────────────────────────────────────────────────────────
 function pmChip(method) {
   const pm = PAY_METHODS.find(m => m.key === method);
-  return pm ? `<span class="pay-chip">${pm.short}</span>` : '';
+  return pm ? `<span class="pay-chip">via ${pm.short}</span>` : '';
 }
 function startPayment(type, ...args) {
   // Determine the item key for restriction lookups (fixed items only)
@@ -985,7 +1057,7 @@ function confirmPay(method) {
   if (type === 'fixed') {
     const [key] = args;
     const md = getMD();
-    updateMonth({ paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method} });
+    updateMonth({ paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method}, payDate:{...(md.payDate||{}),[key]:today()} });
   } else if (type === 'misc') {
     const [cat, idx] = args;
     captureMiscDraft(cat);
@@ -999,7 +1071,7 @@ function confirmPay(method) {
   } else if (type === 'outFixed') {
     const [mk, key] = args;
     const md = getMDFor(mk);
-    updateMonthFor(mk, { paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method} });
+    updateMonthFor(mk, { paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method}, payDate:{...(md.payDate||{}),[key]:today()} });
   } else if (type === 'outItem') {
     const [mk, cat, idx] = args;
     const md = getMDFor(mk);
@@ -1009,6 +1081,158 @@ function confirmPay(method) {
 function cancelPay() {
   pendingPay = null;
   document.getElementById('pay-overlay').classList.add('hidden');
+}
+
+// ── Credit-card cycles ─────────────────────────────────────────────────────
+function isoOf(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; }
+function fmtDM(dt){ return dt.getDate() + ' ' + dt.toLocaleDateString('en-IN',{month:'short'}); }
+function fmtDMY(dt){ return dt.getDate() + ' ' + dt.toLocaleDateString('en-IN',{month:'short',year:'2-digit'}); }
+
+// The billing cycle window that contains a given date.
+function ccCycleOf(cardKey, dateStr) {
+  const cfg = CC_CYCLES[cardKey];
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const startM = (d < cfg.startDay) ? m-1 : m;            // day before startDay belongs to previous cycle
+  const start = new Date(y, startM-1, cfg.startDay);
+  const end   = new Date(start.getFullYear(), start.getMonth()+1, cfg.endDay);
+  const due   = new Date(end.getFullYear(),   end.getMonth()+1,   cfg.dueDay);
+  return { start, end, due, key: isoOf(end) };
+}
+
+// All charges booked to a card across every month.
+function ccChargesFor(cardKey) {
+  const charges = [];
+  const arrays = ['aaviaMisc','groceries','householdGroceries','householdMisc','nehaMisc','avishekMisc'];
+  const fixedAmt = {
+    schoolFees: mk => schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk),
+    bizone:     mk => bizoneFee(mk),
+    english:    mk => englishFee(mk),
+  };
+  Object.keys(appState.months||{}).forEach(mk => {
+    const md = getMDFor(mk);
+    arrays.forEach(cat => (md[cat]||[]).forEach(it => {
+      if (it.paid && it.payMethod === cardKey) charges.push({ amount:Number(it.amount||0), date: it.date || (mk+'-15') });
+    }));
+    Object.keys(fixedAmt).forEach(key => {
+      if (md.paid[key] && (md.payMethod||{})[key] === cardKey)
+        charges.push({ amount: fixedAmt[key](mk), date: (md.payDate||{})[key] || (mk+'-15') });
+    });
+  });
+  return charges;
+}
+
+// Group charges into billing cycles and allocate bill payments oldest-first.
+function ccBuildCycles(cardKey) {
+  const charges = ccChargesFor(cardKey);
+  const map = {};
+  charges.forEach(ch => {
+    const cyc = ccCycleOf(cardKey, ch.date);
+    (map[cyc.key] = map[cyc.key] || { cyc, total:0 }).total += ch.amount;
+  });
+  const asc = Object.values(map).sort((a,b) => a.cyc.end - b.cyc.end);
+  const totalCharged = charges.reduce((s,c) => s+c.amount, 0);
+  const pays = getCcPayments()[cardKey];
+  const totalPaid = pays.reduce((s,p) => s+Number(p.amount||0), 0);
+  let pool = totalPaid;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const out = asc.map(({cyc,total}) => {
+    const paidTo = Math.min(pool, total); pool -= paidTo;
+    const remaining = total - paidTo;
+    const left = paidTo > 0 ? ` · ₹${inr(remaining)} left` : '';
+    let statusClass, statusLabel;
+    if (cyc.end >= now)        { statusClass='cur';  statusLabel='Current · closes ' + fmtDM(cyc.end); }
+    else if (remaining <= 0)   { statusClass='ok';   statusLabel='Paid'; }
+    else if (now > cyc.due)    { statusClass='over'; statusLabel='Overdue · was due ' + fmtDM(cyc.due) + left; }
+    else                       { statusClass='due';  statusLabel='Due ' + fmtDM(cyc.due) + left; }
+    return { label: fmtDM(cyc.start)+' – '+fmtDM(cyc.end), total, statusClass, statusLabel };
+  });
+  out.reverse(); // most recent first
+  return { cycles: out, outstanding: totalCharged - totalPaid };
+}
+
+function saveCcPayments(next) {
+  appState = { ...appState, ccPayments: next };
+  saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
+}
+function addCcPayment(cardKey) {
+  const amt  = Math.round(Number((document.getElementById('cc-amt-'+cardKey)||{}).value));
+  const date = (document.getElementById('cc-date-'+cardKey)||{}).value || today();
+  if (!(amt > 0)) return;
+  const cur = getCcPayments();
+  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { amount:amt, date }] });
+}
+function deleteCcPayment(cardKey, idx) {
+  const cur = getCcPayments();
+  saveCcPayments({ ...cur, [cardKey]: cur[cardKey].filter((_,i) => i!==idx) });
+}
+
+// ── Monthly category totals ────────────────────────────────────────────────
+function monthCategoryTotals(mk) {
+  const md = getMDFor(mk), dim = daysInMonth(mk);
+  let maids = MAIDS.reduce((s,m) => s + maidPayout(effectiveBase(mk,m.key,m.base), md.maidLeaves[m.key]??2, dim), 0);
+  if (mk >= '2026-08' && mk <= '2026-10') maids += japaMaidPayout(mk, md.japaDaysPresent);
+  const aavia = schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk) + bizoneFee(mk)
+    + (md.swimmingAttended ? effectiveBase(mk,'swimming',4000) : 0)
+    + (md.bharatnatyamAttended ? effectiveBase(mk,'bharatnatyam',1500) : 0)
+    + (md.chessDates||[]).length * effectiveBase(mk,'chessRate',500)
+    + (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375)
+    + englishFee(mk)
+    + (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const fixed = SUKANYA + carEmiFee(mk) + effectiveBase(mk,'rent',rentFee(mk));
+  const sum = arr => (arr||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+  const household = sum(md.groceries) + sum(md.householdGroceries) + sum(md.householdMisc);
+  const neha = sum(md.nehaMisc), avishek = sum(md.avishekMisc);
+  return { maids, aavia, fixed, household, neha, avishek, total: maids+aavia+fixed+household+neha+avishek };
+}
+
+// ── Hamburger drawer ───────────────────────────────────────────────────────
+function openMenu()  { renderMenu(); document.getElementById('menu-overlay').classList.remove('hidden'); }
+function closeMenu() { document.getElementById('menu-overlay').classList.add('hidden'); }
+function renderMenu() {
+  const el = document.getElementById('menu-content');
+  if (el) el.innerHTML = ccSectionHtml() + monthlySpendsHtml();
+}
+function ccSectionHtml() {
+  let html = `<div class="menu-h">Credit Cards</div>`;
+  Object.keys(CC_CYCLES).forEach(cardKey => {
+    const cfg = CC_CYCLES[cardKey];
+    const b = ccBuildCycles(cardKey);
+    html += `<section class="cc-card">
+      <div class="cc-head">
+        <span class="cc-name">${cfg.label}</span>
+        <span class="cc-out ${b.outstanding>0?'due':'ok'}">₹${inr(Math.max(0,b.outstanding))} <small>owed</small></span>
+      </div>`;
+    html += b.cycles.length
+      ? b.cycles.map(c => `<div class="cc-cyc">
+          <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
+          <div class="cc-cyc-amt">₹${inr(c.total)}</div>
+        </div>`).join('')
+      : `<div class="cc-empty">No spends on this card yet</div>`;
+    const pays = getCcPayments()[cardKey];
+    if (pays.length) html += `<div class="cc-pays">` + pays.map((p,i) =>
+      `<div class="cc-pay"><span>Paid ₹${inr(p.amount)} · ${fmtDMY(new Date(p.date))}</span><button class="cc-del" onclick="deleteCcPayment('${cardKey}',${i})" aria-label="delete">✕</button></div>`).join('') + `</div>`;
+    html += `<div class="cc-form">
+      <input id="cc-amt-${cardKey}" class="misc-amt" type="number" inputmode="numeric" placeholder="pay amount">
+      <input id="cc-date-${cardKey}" class="cc-date" type="date" value="${today()}">
+      <button class="add-btn" onclick="addCcPayment('${cardKey}')">Pay</button>
+    </div></section>`;
+  });
+  return html;
+}
+function monthlySpendsHtml() {
+  let html = `<div class="menu-h">Monthly Spends</div>`;
+  const months = Object.keys(appState.months||{}).filter(mk => mk >= MIN_MONTH).sort().reverse();
+  if (!months.length) return html + `<div class="cc-empty">No data yet</div>`;
+  const cats = [['maids','Maids'],['aavia','Aavia'],['fixed','Fixed'],['household','Household'],['neha','Neha'],['avishek','Avishek']];
+  months.forEach(mk => {
+    const t = monthCategoryTotals(mk);
+    html += `<section class="ms-month">
+      <div class="ms-head"><span>${monthLabel(mk)}</span><span class="ms-total">₹${inr(t.total)}</span></div>
+      <div class="ms-rows">` +
+      cats.map(([k,lbl]) => `<div class="ms-row"><span>${lbl}</span><span>₹${inr(t[k])}</span></div>`).join('') +
+      `</div></section>`;
+  });
+  return html;
 }
 
 // ── Collapse handling ──────────────────────────────────────────────────────
@@ -1076,6 +1300,7 @@ function miscItemList(cat, items) {
   let html = `<div class="misc-add">
     <input id="m-txt-${cat}" class="misc-txt" type="text" placeholder="what for" value="${esc(d.text||'')}" oninput="captureMiscDraft('${cat}')">
     <input id="m-amt-${cat}" class="misc-amt" type="number" inputmode="numeric" placeholder="amount" value="${esc(d.amount||'')}" oninput="captureMiscDraft('${cat}')">
+    <input id="m-date-${cat}" class="misc-date" type="date" value="${esc(d.date||today())}" onchange="captureMiscDraft('${cat}')" title="Spend date">
     <button class="add-btn" onclick="addMiscItem('${cat}')">Add</button>
   </div>`;
   if ((items||[]).length) {
@@ -1083,7 +1308,7 @@ function miscItemList(cat, items) {
     <div class="mitem">
       <div class="mitem-left">
         <div class="mitem-txt">${esc(it.text)}</div>
-        <div class="mitem-date">${esc(it.date||'')}</div>
+        <input class="item-date-inp" type="date" value="${esc(it.date||'')}" onchange="editMiscDate('${cat}',${i},this.value)" title="Spend date">
       </div>
       <div class="mitem-right">
         <span class="mitem-amt">₹${inr(it.amount)}</span>
@@ -1324,11 +1549,12 @@ function render() {
         <option value="other"${gDraftC==='other'?' selected':''}>other</option>
       </select>
       <input id="g-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount" value="${esc(gDraft.amount)}" oninput="gDraft.amount=this.value">
+      <input id="g-date" class="misc-date" type="date" value="${esc(gDraft.date||today())}" onchange="captureGroceryDraft()" title="Spend date">
       <button class="add-btn" onclick="addGrocery()">Add</button>
     </div>`;
   groceries.forEach((g,i)=>{
     hhBody += `<div class="g-item">
-      <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div><div class="g-item-date">${esc(g.date||'')}</div></div>
+      <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div><input class="item-date-inp" type="date" value="${esc(g.date||'')}" onchange="editGroceryDate(${i},this.value)" title="Spend date"></div>
       <div class="g-item-right">
         <span class="g-item-amt">₹${inr(g.amount)}</span>
         ${g.paid
