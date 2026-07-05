@@ -172,6 +172,9 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .mitem-date,.g-item-date{font-family:var(--sans);font-size:12px;color:var(--faint);margin-top:2px}
 .misc-date{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;color:var(--ink);min-height:44px;font-family:var(--sans)}
 .item-date-inp{border:none;background:none;color:var(--muted);font-family:var(--sans);padding:2px 0;margin-top:1px;min-height:26px}
+.date-chip{position:relative;display:inline-flex;align-items:center;margin-top:2px}
+.date-chip-lbl{font-family:var(--sans);font-size:12px;color:var(--muted);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px}
+.date-chip-inp{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;margin:0;min-height:24px}
 .mitem-right,.g-item-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .mitem-amt,.g-item-amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
 .del-btn{background:none;border:none;color:var(--faint);font-size:24px;cursor:pointer;padding:0 6px;min-height:44px;line-height:1;-webkit-tap-highlight-color:transparent;transition:color .15s}
@@ -250,6 +253,9 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 #menu-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent}
 #menu-content{padding:4px 14px 48px}
 .menu-h{font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin:18px 4px 10px}
+.menu-sw{display:flex;gap:6px;margin:6px 0 16px}
+.menu-sw-btn{flex:1;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:9px 6px;font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;line-height:1.25;-webkit-tap-highlight-color:transparent}
+.menu-sw-btn.on{background:var(--ink);color:var(--cream);border-color:var(--ink)}
 .cc-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
 .cc-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
 .cc-name{font-family:var(--serif);font-size:17px;font-weight:600}
@@ -272,6 +278,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .ms-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
 .ms-head span:first-child{font-family:var(--serif);font-size:16px;font-weight:600}
 .ms-total{font-family:var(--mono);font-size:16px;font-weight:600}
+.ms-total.g{color:var(--green)}
 .ms-rows{display:flex;flex-direction:column;gap:4px}
 .ms-row{display:flex;justify-content:space-between;font-family:var(--sans);font-size:13.5px;color:var(--ink-soft)}
 .ms-row span:last-child{font-family:var(--mono)}
@@ -470,7 +477,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -493,6 +500,7 @@ let uiPrefs = { collapsed: {} };
 let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
 let miscDrafts = {};
 let pendingPay = null;
+let menuView = 'cc'; // hamburger drawer: 'cc' | 'spends' | 'source'
 
 function todayMonthKey() {
   const n = new Date();
@@ -720,14 +728,16 @@ function addGrocery() {
   captureGroceryDraft();
   const amt = Number(gDraft.amount);
   if (!amt) return;
-  const md = getMD();
-  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date:gDraft.date||today(), paid:false };
+  const date = gDraft.date || today();
+  const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
+  const tmd = getMDFor(mk);
+  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date, paid:false };
   gDraft.amount=''; gDraft.date='';
-  updateMonth({ groceries:[...(md.groceries||[]),entry] });
+  updateMonthFor(mk, { groceries:[...(tmd.groceries||[]),entry] });
 }
 function editGroceryDate(i, val) {
-  const md = getMD();
-  updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
+  if (!val) return;
+  moveDatedItem('groceries', i, val);
 }
 function toggleGroceryPaid(i) {
   // Only called to UNMARK; marking goes through startPayment
@@ -747,20 +757,39 @@ function captureMiscDraft(cat) {
   const a=document.getElementById(`m-amt-${cat}`); if(a){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].amount=a.value; }
   const d=document.getElementById(`m-date-${cat}`); if(d){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].date=d.value; }
 }
+function clampMonth(mk) { return (mk && mk >= MIN_MONTH) ? mk : MIN_MONTH; }
 function addMiscItem(cat) {
   captureMiscDraft(cat);
   const d = miscDrafts[cat] || {};
   const text = (d.text||'').trim();
   const amt  = Number(d.amount||0);
   if (!text || !amt) return;
-  const md = getMD();
   const date = d.date || today();
+  const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
+  const tmd = getMDFor(mk);
   miscDrafts[cat] = { text:'', amount:'', date:'' };
-  updateMonth({ [cat]:[...(md[cat]||[]),{ text, amount:amt, paid:false, date }] });
+  updateMonthFor(mk, { [cat]:[...(tmd[cat]||[]),{ text, amount:amt, paid:false, date }] });
 }
 function editMiscDate(cat, i, val) {
-  const md = getMD();
-  updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
+  if (!val) return;
+  moveDatedItem(cat, i, val);
+}
+// Change an array item's date; if the new date is in another month, move the item there.
+function moveDatedItem(cat, i, val) {
+  const fromMk = currentMonth;
+  const toMk   = clampMonth(monthKeyOf(val));
+  const fmd    = getMD();
+  const item   = (fmd[cat]||[])[i];
+  if (!item) return;
+  if (toMk === fromMk) {
+    updateMonth({ [cat]:(fmd[cat]||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
+    return;
+  }
+  const tmd = getMDFor(toMk);
+  appState = { ...appState, months: { ...appState.months,
+    [fromMk]: { ...fmd, [cat]: (fmd[cat]||[]).filter((_,idx)=>idx!==i) },
+    [toMk]:   { ...tmd, [cat]: [...(tmd[cat]||[]), { ...item, date: val }] } } };
+  saveLocal(); render(); if (IN_GAS) scheduleSync();
 }
 function toggleMiscPaid(cat,i) {
   // Only called to UNMARK; marking goes through startPayment
@@ -1087,6 +1116,20 @@ function cancelPay() {
 function isoOf(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; }
 function fmtDM(dt){ return dt.getDate() + ' ' + dt.toLocaleDateString('en-IN',{month:'short'}); }
 function fmtDMY(dt){ return dt.getDate() + ' ' + dt.toLocaleDateString('en-IN',{month:'short',year:'2-digit'}); }
+// Display an ISO date string (YYYY-MM-DD) as DD-MMM (e.g. 05-Jul). Blank-safe.
+function fmtDate(dateStr){
+  if (!dateStr) return '';
+  const [y,m,d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return String(d).padStart(2,'0') + '-' + new Date(y, m-1, d).toLocaleDateString('en-IN',{month:'short'});
+}
+function monthKeyOf(dateStr){ return (dateStr||'').slice(0,7); }
+// Editable date shown as a DD-MMM chip: a transparent native date input overlays
+// the label, so tapping opens the picker while it reads as DD-MMM.
+function dateChip(cur, onchangeAttr) {
+  return `<span class="date-chip"><span class="date-chip-lbl">${cur?fmtDate(cur):'set date'}</span>`
+       + `<input class="date-chip-inp" type="date" value="${esc(cur||'')}" ${onchangeAttr} title="Spend date"></span>`;
+}
 
 // The billing cycle window that contains a given date.
 function ccCycleOf(cardKey, dateStr) {
@@ -1140,11 +1183,11 @@ function ccBuildCycles(cardKey) {
     const remaining = total - paidTo;
     const left = paidTo > 0 ? ` · ₹${inr(remaining)} left` : '';
     let statusClass, statusLabel;
-    if (cyc.end >= now)        { statusClass='cur';  statusLabel='Current · closes ' + fmtDM(cyc.end); }
+    if (cyc.end >= now)        { statusClass='cur';  statusLabel='Current · closes ' + fmtDate(isoOf(cyc.end)); }
     else if (remaining <= 0)   { statusClass='ok';   statusLabel='Paid'; }
-    else if (now > cyc.due)    { statusClass='over'; statusLabel='Overdue · was due ' + fmtDM(cyc.due) + left; }
-    else                       { statusClass='due';  statusLabel='Due ' + fmtDM(cyc.due) + left; }
-    return { label: fmtDM(cyc.start)+' – '+fmtDM(cyc.end), total, statusClass, statusLabel };
+    else if (now > cyc.due)    { statusClass='over'; statusLabel='Overdue · was due ' + fmtDate(isoOf(cyc.due)) + left; }
+    else                       { statusClass='due';  statusLabel='Due ' + fmtDate(isoOf(cyc.due)) + left; }
+    return { label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, statusClass, statusLabel };
   });
   out.reverse(); // most recent first
   return { cycles: out, outstanding: totalCharged - totalPaid };
@@ -1188,12 +1231,20 @@ function monthCategoryTotals(mk) {
 // ── Hamburger drawer ───────────────────────────────────────────────────────
 function openMenu()  { renderMenu(); document.getElementById('menu-overlay').classList.remove('hidden'); }
 function closeMenu() { document.getElementById('menu-overlay').classList.add('hidden'); }
+function setMenuView(v) { menuView = v; renderMenu(); }
 function renderMenu() {
   const el = document.getElementById('menu-content');
-  if (el) el.innerHTML = ccSectionHtml() + monthlySpendsHtml();
+  if (!el) return;
+  const tabs = [['cc','Credit Card Payments'],['spends','Monthly Spends'],['source','Source of spends']];
+  const sw = `<div class="menu-sw">` + tabs.map(([k,l]) =>
+    `<button class="menu-sw-btn${menuView===k?' on':''}" onclick="setMenuView('${k}')">${l}</button>`).join('') + `</div>`;
+  const body = menuView==='spends' ? monthlySpendsHtml()
+             : menuView==='source' ? sourceSpendsHtml()
+             : ccSectionHtml();
+  el.innerHTML = sw + body;
 }
 function ccSectionHtml() {
-  let html = `<div class="menu-h">Credit Cards</div>`;
+  let html = '';
   Object.keys(CC_CYCLES).forEach(cardKey => {
     const cfg = CC_CYCLES[cardKey];
     const b = ccBuildCycles(cardKey);
@@ -1219,20 +1270,41 @@ function ccSectionHtml() {
   });
   return html;
 }
+function menuMonths() {
+  return Object.keys(appState.months||{}).filter(mk => mk >= MIN_MONTH).sort().reverse();
+}
 function monthlySpendsHtml() {
-  let html = `<div class="menu-h">Monthly Spends</div>`;
-  const months = Object.keys(appState.months||{}).filter(mk => mk >= MIN_MONTH).sort().reverse();
-  if (!months.length) return html + `<div class="cc-empty">No data yet</div>`;
+  const months = menuMonths();
+  if (!months.length) return `<div class="cc-empty">No data yet</div>`;
   const cats = [['maids','Maids'],['aavia','Aavia'],['fixed','Fixed'],['household','Household'],['neha','Neha'],['avishek','Avishek']];
-  months.forEach(mk => {
+  return months.map(mk => {
     const t = monthCategoryTotals(mk);
-    html += `<section class="ms-month">
+    return `<section class="ms-month">
       <div class="ms-head"><span>${monthLabel(mk)}</span><span class="ms-total">₹${inr(t.total)}</span></div>
       <div class="ms-rows">` +
       cats.map(([k,lbl]) => `<div class="ms-row"><span>${lbl}</span><span>₹${inr(t[k])}</span></div>`).join('') +
       `</div></section>`;
-  });
-  return html;
+  }).join('');
+}
+// Per-month spend grouped by payment source, with an Unpaid line so each month reconciles.
+function sourceSpendsHtml() {
+  const months = menuMonths();
+  if (!months.length) return `<div class="cc-empty">No data yet</div>`;
+  return months.map(mk => {
+    const paid = collectPaidItems(mk);
+    const byM = {};
+    paid.forEach(it => { if (it.method) byM[it.method] = (byM[it.method]||0) + it.amount; });
+    const paidSum = paid.reduce((s,it) => s+it.amount, 0);
+    const unpaid  = Math.max(0, monthCategoryTotals(mk).total - paidSum);
+    const rows = PAY_METHODS.filter(m => byM[m.key]).map(m =>
+      `<div class="ms-row"><span>${m.label}</span><span>₹${inr(byM[m.key])}</span></div>`).join('');
+    const unpaidRow = unpaid > 0.5
+      ? `<div class="ms-row"><span style="color:var(--maroon)">Unpaid</span><span style="color:var(--maroon)">₹${inr(unpaid)}</span></div>` : '';
+    return `<section class="ms-month">
+      <div class="ms-head"><span>${monthLabel(mk)}</span><span class="ms-total g">₹${inr(paidSum)}</span></div>
+      <div class="ms-rows">${rows || '<div class="cc-empty">No paid spends</div>'}${unpaidRow}</div>
+    </section>`;
+  }).join('');
 }
 
 // ── Collapse handling ──────────────────────────────────────────────────────
@@ -1308,7 +1380,7 @@ function miscItemList(cat, items) {
     <div class="mitem">
       <div class="mitem-left">
         <div class="mitem-txt">${esc(it.text)}</div>
-        <input class="item-date-inp" type="date" value="${esc(it.date||'')}" onchange="editMiscDate('${cat}',${i},this.value)" title="Spend date">
+        ${dateChip(it.date, `onchange="editMiscDate('${cat}',${i},this.value)"`)}
       </div>
       <div class="mitem-right">
         <span class="mitem-amt">₹${inr(it.amount)}</span>
@@ -1346,6 +1418,19 @@ function sectionCard(id, title, amount, paid, bodyHtml, opts) {
     </button>
     <div class="hd-bar"><i style="width:${pct}%"></i></div>
     <div class="card-body-wrap"><div class="card-body" id="body-${id}">${bodyHtml}</div></div>
+  </section>`;
+}
+// Lightweight collapsible card for the Payments/Outstanding tabs (defaults open).
+function collapsibleCard(id, title, subHtml, amountHtml, bodyHtml, barHtml) {
+  const open = isOpen(id, 1);
+  return `<section class="card${open?' open':''}" data-sec="${id}" aria-expanded="${open?'true':'false'}" style="margin-bottom:14px">
+    <button class="card-hd" onclick="toggleCollapse('${id}')">
+      <span class="chev" aria-hidden="true">›</span>
+      <span class="hd-main"><span class="hd-title">${title}</span><span class="hd-sub">${subHtml||''}</span></span>
+      <span class="hd-amt">${amountHtml||''}</span>
+    </button>
+    ${barHtml||''}
+    <div class="card-body-wrap"><div class="card-body" style="padding-bottom:8px">${bodyHtml}</div></div>
   </section>`;
 }
 
@@ -1554,7 +1639,7 @@ function render() {
     </div>`;
   groceries.forEach((g,i)=>{
     hhBody += `<div class="g-item">
-      <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div><input class="item-date-inp" type="date" value="${esc(g.date||'')}" onchange="editGroceryDate(${i},this.value)" title="Spend date"></div>
+      <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div>${dateChip(g.date, `onchange="editGroceryDate(${i},this.value)"`)}</div>
       <div class="g-item-right">
         <span class="g-item-amt">₹${inr(g.amount)}</span>
         ${g.paid
@@ -1572,9 +1657,11 @@ function render() {
   const avishBody = miscItemList('avishekMisc', md.avishekMisc);
 
   // ── Assemble ────────────────────────────────────────────────────────
+  const secDefs = [['maids',maidsSecTot-maidsPaid],['aavia',aaviaTot-aaviaPaid],['fixed',fixedTot-fixedPaid],
+                   ['household',hhTot-hhPaid],['neha',nehaTot-nehaPaid],['avishek',avishTot-avishPd]];
+  const anyOpen = secDefs.some(([id,pending]) => isOpen(id, pending));
   let html = `<div class="toolbar">
-    <button class="tbtn" onclick="setAllCollapsed(false)">Expand all</button>
-    <button class="tbtn" onclick="setAllCollapsed(true)">Collapse all</button>
+    <button class="tbtn" onclick="setAllCollapsed(${anyOpen})">${anyOpen?'Collapse all':'Expand all'}</button>
   </div><div id="sections">`;
   html += sectionCard('maids',    'Maids',     maidsSecTot, maidsPaid, maidsBody);
   html += sectionCard('aavia',    'Aavia',     aaviaTot,    aaviaPaid, aaviaBody);
@@ -1589,58 +1676,47 @@ function render() {
   setSyncState(IN_GAS ? 'ok' : 'off');
 }
 
-// ── Payments render ────────────────────────────────────────────────────────
-function renderPayments() {
-  const md  = getMD();
-  const dim = daysInMonth(currentMonth);
-  const allPaid = [];
-
+// Every paid item for a month as {label, amount, method, date}. Shared by the
+// Payments tab and the drawer's "Source of spends" view.
+function collectPaidItems(mk) {
+  const md = getMDFor(mk), dim = daysInMonth(mk);
+  const out = [];
   const addFixed = (label, amount, key) => {
     if (md.paid[key] && amount > 0)
-      allPaid.push({ label, amount, method:(md.payMethod||{})[key]||null });
+      out.push({ label, amount, method:(md.payMethod||{})[key]||null, date:(md.payDate||{})[key]||'' });
   };
-
-  // Maids
-  MAIDS.forEach(m => {
-    const base   = effectiveBase(currentMonth, m.key, m.base);
-    const leaves = md.maidLeaves[m.key] ?? 2;
-    addFixed(m.label, maidPayout(base, leaves, dim), m.key);
-  });
-  const japaActive = currentMonth >= '2026-08' && currentMonth <= '2026-10';
-  if (japaActive) addFixed('Japa Maid', japaMaidPayout(currentMonth, md.japaDaysPresent), 'japaMaid');
-
-  // Aavia — School
-  const schoolTot = schoolTuition(currentMonth) + schoolTermFee(currentMonth) + schoolBusFee(currentMonth);
+  MAIDS.forEach(m => addFixed(m.label, maidPayout(effectiveBase(mk,m.key,m.base), md.maidLeaves[m.key]??2, dim), m.key));
+  if (mk >= '2026-08' && mk <= '2026-10') addFixed('Japa Maid', japaMaidPayout(mk, md.japaDaysPresent), 'japaMaid');
+  const schoolTot = schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk);
   if (schoolTot) addFixed('PG Garodia School', schoolTot, 'schoolFees');
-  const bz = bizoneFee(currentMonth); if (bz) addFixed('Bizone', bz, 'bizone');
-  const en = englishFee(currentMonth); if (en) addFixed('English (Sheetal)', en, 'english');
-  if (md.swimmingAttended)     addFixed('Swimming',     effectiveBase(currentMonth,'swimming',4000),     'swimming');
-  if (md.bharatnatyamAttended) addFixed('Bharatnatyam', effectiveBase(currentMonth,'bharatnatyam',1500), 'bharatnatyam');
-  const chessAmt = (md.chessDates||[]).length * effectiveBase(currentMonth,'chessRate',500);
+  const bz = bizoneFee(mk); if (bz) addFixed('Bizone', bz, 'bizone');
+  const en = englishFee(mk); if (en) addFixed('English (Sheetal)', en, 'english');
+  if (md.swimmingAttended)     addFixed('Swimming',     effectiveBase(mk,'swimming',4000),     'swimming');
+  if (md.bharatnatyamAttended) addFixed('Bharatnatyam', effectiveBase(mk,'bharatnatyam',1500), 'bharatnatyam');
+  const chessAmt = (md.chessDates||[]).length * effectiveBase(mk,'chessRate',500);
   if (chessAmt)  addFixed('Chess',   chessAmt,  'chess');
-  const skateAmt = (md.skatingDates||[]).length * effectiveBase(currentMonth,'skatingRate',375);
+  const skateAmt = (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375);
   if (skateAmt)  addFixed('Skating', skateAmt, 'skating');
-
-  // Fixed
   addFixed('Sukanya Samriddhi', SUKANYA, 'sukanya');
-  const ce = carEmiFee(currentMonth); if (ce) addFixed('Car EMI', ce, 'carEmi');
-  addFixed('Rent', effectiveBase(currentMonth,'rent',rentFee(currentMonth)), 'rent');
+  const ce = carEmiFee(mk); if (ce) addFixed('Car EMI', ce, 'carEmi');
+  addFixed('Rent', effectiveBase(mk,'rent',rentFee(mk)), 'rent');
+  const pushItems = (arr, labelFn) => (arr||[]).filter(it=>it.paid).forEach(it =>
+    out.push({ label:labelFn(it), amount:Number(it.amount||0), method:it.payMethod||null, date:it.date||'' }));
+  pushItems(md.aaviaMisc,          it=>'Aavia — '+it.text);
+  pushItems(md.groceries,          g =>g.vendor+' ('+g.category+')');
+  pushItems(md.householdGroceries, it=>'HH Groceries — '+it.text);
+  pushItems(md.householdMisc,      it=>'HH Misc — '+it.text);
+  pushItems(md.nehaMisc,           it=>'Neha — '+it.text);
+  pushItems(md.avishekMisc,        it=>'Avishek — '+it.text);
+  return out;
+}
 
-  // Array items
-  const pushItems = (arr, labelFn) =>
-    (arr||[]).filter(it=>it.paid).forEach(it => allPaid.push({ label:labelFn(it), amount:it.amount, method:it.payMethod||null }));
-  pushItems(md.aaviaMisc,           it=>'Aavia — '+it.text);
-  pushItems(md.groceries,           g =>g.vendor+' ('+g.category+')');
-  pushItems(md.householdGroceries,  it=>'HH Groceries — '+it.text);
-  pushItems(md.householdMisc,       it=>'HH Misc — '+it.text);
-  pushItems(md.nehaMisc,            it=>'Neha — '+it.text);
-  pushItems(md.avishekMisc,         it=>'Avishek — '+it.text);
-
-  // Group by method
+// ── Payments render ────────────────────────────────────────────────────────
+function renderPayments() {
+  const allPaid = collectPaidItems(currentMonth);
   const byMethod = {};
   const unknown  = [];
-  allPaid.forEach(it => it.method ? (byMethod[it.method] = byMethod[it.method]||[], byMethod[it.method].push(it)) : unknown.push(it));
-
+  allPaid.forEach(it => it.method ? ((byMethod[it.method] = byMethod[it.method]||[]).push(it)) : unknown.push(it));
   const totalPaid = allPaid.reduce((s,it) => s+it.amount, 0);
 
   document.getElementById('summary').innerHTML = `
@@ -1668,49 +1744,40 @@ function renderPayments() {
 
   const itemRows = items => items.map(it=>`
     <div class="out-item">
-      <div class="lrow-left"><div class="out-item-name">${esc(it.label)}</div></div>
+      <div class="lrow-left">
+        <div class="out-item-name">${esc(it.label)}</div>
+        ${it.date ? `<div class="out-item-sub">${fmtDate(it.date)}</div>` : ''}
+      </div>
       <div class="out-item-right"><span class="out-amt" style="color:var(--green)">₹${inr(it.amount)}</span></div>
     </div>`).join('');
 
-  let html = `<div style="height:16px"></div>`;
+  const cardIds = PAY_METHODS.filter(pm => byMethod[pm.key]?.length).map(pm => 'pay-'+pm.key);
+  if (unknown.length) cardIds.push('pay-none');
+  let html = collapseToolbar(cardIds);
 
   PAY_METHODS.forEach(pm => {
     const items = byMethod[pm.key];
     if (!items?.length) return;
     const total = items.reduce((s,it)=>s+it.amount,0);
-    html += `<section class="card open" style="margin-bottom:14px">
-      <div class="card-hd static">
-        <span class="hd-main">
-          <span class="hd-title">${pm.label}</span>
-          <span class="hd-sub"><span class="tag-ok">${items.length} item${items.length===1?'':'s'}</span></span>
-        </span>
-        <span class="hd-amt">₹${inr(total)}</span>
-      </div>
-      <div class="card-body" style="padding-bottom:8px">
-        ${itemRows(items)}
-        <div class="pmth-total-row">
-          <span class="pmth-total-lbl">${pm.label} total</span>
-          <span class="pmth-total-val">₹${inr(total)}</span>
-        </div>
-      </div>
-    </section>`;
+    const body = itemRows(items) +
+      `<div class="pmth-total-row"><span class="pmth-total-lbl">${pm.label} total</span><span class="pmth-total-val">₹${inr(total)}</span></div>`;
+    html += collapsibleCard('pay-'+pm.key, pm.label,
+      `<span class="tag-ok">${items.length} item${items.length===1?'':'s'}</span>`, '₹'+inr(total), body);
   });
 
   if (unknown.length) {
     const total = unknown.reduce((s,it)=>s+it.amount,0);
-    html += `<section class="card open" style="margin-bottom:14px">
-      <div class="card-hd static">
-        <span class="hd-main">
-          <span class="hd-title">Method not recorded</span>
-          <span class="hd-sub"><span class="tag-none">pre-existing paid data</span></span>
-        </span>
-        <span class="hd-amt">₹${inr(total)}</span>
-      </div>
-      <div class="card-body" style="padding-bottom:8px">${itemRows(unknown)}</div>
-    </section>`;
+    html += collapsibleCard('pay-none', 'Method not recorded',
+      `<span class="tag-none">pre-existing paid data</span>`, '₹'+inr(total), itemRows(unknown));
   }
 
   document.getElementById('app-body').innerHTML = html;
+}
+// Single expand/collapse-all toggle for a set of default-open cards.
+function anyOpenDefault(ids) { return ids.some(id => uiPrefs.collapsed[id] !== true); }
+function collapseToolbar(ids) {
+  const open = anyOpenDefault(ids);
+  return `<div class="toolbar"><button class="tbtn" onclick="setAllCollapsed(${open})">${open?'Collapse all':'Expand all'}</button></div>`;
 }
 
 // ── Outstanding render ─────────────────────────────────────────────────────
@@ -1742,7 +1809,7 @@ function renderOutstanding() {
     return;
   }
 
-  let html = `<div style="height:16px"></div>`;
+  let html = collapseToolbar(groups.map(g => 'out-'+g.mk));
   groups.forEach(g => {
     const mTotal = g.items.reduce((s,it) => s+it.amount, 0);
     const w = maxTotal>0 ? Math.round(mTotal/maxTotal*100) : 0;
@@ -1759,17 +1826,10 @@ function renderOutstanding() {
         </div>
       </div>`;
     });
-    html += `<section class="card open ogroup">
-      <div class="card-hd static">
-        <span class="hd-main">
-          <span class="hd-title">${esc(g.label)}</span>
-          <span class="hd-sub"><span class="tag-due">${g.items.length} item${g.items.length===1?'':'s'} due</span></span>
-        </span>
-        <span class="hd-amt r">₹${inr(mTotal)}</span>
-      </div>
-      <div class="hd-bar"><i style="width:${w}%;background:var(--maroon-soft)"></i></div>
-      <div class="card-body" style="padding-bottom:8px">${items}</div>
-    </section>`;
+    const bar = `<div class="hd-bar"><i style="width:${w}%;background:var(--maroon-soft)"></i></div>`;
+    html += collapsibleCard('out-'+g.mk, esc(g.label),
+      `<span class="tag-due">${g.items.length} item${g.items.length===1?'':'s'} due</span>`,
+      '₹'+inr(mTotal), items, bar);
   });
 
   document.getElementById('app-body').innerHTML = html;
