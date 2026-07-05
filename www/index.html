@@ -231,6 +231,13 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 }
 
 /* ── Payment picker bottom sheet ── */
+/* Launch splash */
+@keyframes launchIn{0%{opacity:0;transform:scale(.8)}60%{opacity:1;transform:scale(1.04)}100%{opacity:1;transform:scale(1)}}
+@keyframes launchBreathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+#launch-logo{animation:launchIn .5s ease-out both,launchBreathe 2.4s ease-in-out .5s infinite}
+#launch-overlay.hidden{opacity:0;pointer-events:none}
+#apk-gate.hidden{display:none!important}
+#apk-gate-btn:active{filter:brightness(1.25)}
 .login-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
 .login-overlay.hidden{display:none}
 .login-box{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:36px 28px;width:100%;max-width:360px;text-align:center}
@@ -256,6 +263,44 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 </style>
 </head>
 <body>
+
+<!-- Launch splash: first painted element, inline styles so it shows before the main stylesheet loads (seamless handoff from the native splash). -->
+<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f1ece0;transition:opacity .45s ease">
+  <div id="launch-logo" style="width:96px;height:96px">
+    <svg viewBox="0 0 512 512" width="96" height="96" xmlns="http://www.w3.org/2000/svg">
+      <rect width="512" height="512" rx="80" fill="#1f2a24"/>
+      <rect x="130" y="110" width="252" height="292" rx="12" fill="#f7f4ec"/>
+      <rect x="158" y="170" width="196" height="18" rx="4" fill="#1f2a24"/>
+      <rect x="158" y="210" width="196" height="18" rx="4" fill="#1f2a24"/>
+      <rect x="158" y="250" width="140" height="18" rx="4" fill="#1f2a24"/>
+      <rect x="158" y="310" width="80" height="28" rx="4" fill="#8b3a3a"/>
+      <rect x="258" y="310" width="96" height="28" rx="4" fill="#3f5344"/>
+    </svg>
+  </div>
+  <div style="margin-top:22px;font-family:Georgia,serif;font-size:22px;font-weight:700;color:#1f2a24">Household Ledger</div>
+  <div style="margin-top:4px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#847b6a">Avishek Family</div>
+  <div id="launch-track" style="margin-top:34px;width:180px;height:4px;border-radius:999px;background:#ddd5c4;overflow:hidden">
+    <div id="launch-bar" style="height:100%;width:8%;border-radius:999px;background:#3f5344;transition:width .4s ease"></div>
+  </div>
+  <div id="launch-status" style="margin-top:14px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12.5px;color:#847b6a;min-height:16px">Starting…</div>
+</div>
+
+<!-- Mandatory native-update gate (shown only when the installed APK is too old for the current web bundle). -->
+<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f1ece0;padding:28px;text-align:center">
+  <svg viewBox="0 0 512 512" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="512" height="512" rx="80" fill="#1f2a24"/>
+    <rect x="130" y="110" width="252" height="292" rx="12" fill="#f7f4ec"/>
+    <rect x="158" y="170" width="196" height="18" rx="4" fill="#1f2a24"/>
+    <rect x="158" y="210" width="196" height="18" rx="4" fill="#1f2a24"/>
+    <rect x="158" y="250" width="140" height="18" rx="4" fill="#1f2a24"/>
+    <rect x="158" y="310" width="80" height="28" rx="4" fill="#8b3a3a"/>
+    <rect x="258" y="310" width="96" height="28" rx="4" fill="#3f5344"/>
+  </svg>
+  <div style="margin-top:22px;font-family:Georgia,serif;font-size:21px;font-weight:700;color:#1f2a24">Update required</div>
+  <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:#4a4437">A new version of the app is available. Please download and install it to continue.</div>
+  <button id="apk-gate-btn" style="margin-top:26px;background:#1f2a24;color:#f7f4ec;border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
+  <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:#b3ab98"></div>
+</div>
 
 <div id="hdr">
   <div id="hdr-inner">
@@ -370,7 +415,7 @@ const FIXED_METHOD = { rent:'avishekBank', sukanya:'nehaBank', carEmi:'avishekBa
 const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','chess','skating','swimming','bharatnatyam']);
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.1.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1511,47 +1556,106 @@ function updStatus(msg) {
   const el = document.getElementById('app-ver');
   if (el) el.textContent = 'v' + APP_VERSION + (msg ? ' · ' + msg : '');
 }
-async function checkForAppUpdate() {
-  if (!UPDATE_URL.startsWith('https://')) return;
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) { const d = (pa[i]||0) - (pb[i]||0); if (d) return d; }
+  return 0;
+}
+async function fetchVersionInfo() {
+  if (!UPDATE_URL.startsWith('https://')) return null;
+  try {
+    const r = await fetch(UPDATE_URL + '?t=' + Date.now(), { cache:'no-store' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+// Apply a newer web bundle (capgo) if version.json advertises one. Reloads on success.
+async function applyWebUpdate(info) {
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
   const Updater = getNativePlugin('CapacitorUpdater');
   if (!Updater) { updStatus('upd: no plugin'); return; }
-  try { await Updater.notifyAppReady(); } catch (e) {}
   try {
-    updStatus('checking update…');
-    const res  = await fetch(UPDATE_URL + '?t=' + Date.now(), { cache:'no-store' });
-    if (!res.ok) { updStatus('upd: feed HTTP ' + res.status); return; }
-    const info = await res.json();
-    if (!info || !info.version || !info.url) { updStatus('upd: bad feed'); return; }
+    if (!info || !info.version || !info.url) { updStatus(''); return; }
     if (cmpVer(info.version, APP_VERSION) <= 0) { updStatus(''); return; } // already current
-    updStatus('downloading v' + info.version + '…');
+    updStatus('downloading v' + info.version + '…'); launchStatus('Downloading update…', 85);
     const bundle = await Updater.download({ url: info.url, version: info.version });
-    updStatus('installing v' + info.version + '…');
+    updStatus('installing v' + info.version + '…'); launchStatus('Installing update…', 95);
     await Updater.set(bundle); // reloads the app on the new bundle
   } catch (e) {
     updStatus('upd err: ' + ((e && (e.message || e.code)) || String(e)).slice(0, 120));
     setSyncState(IN_GAS ? 'ok' : 'off'); // update failed — keep running current version
   }
 }
-function cmpVer(a, b) {
-  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
-  for (let i = 0; i < 3; i++) { const d = (pa[i]||0) - (pb[i]||0); if (d) return d; }
-  return 0;
+
+// ── Launch screen ───────────────────────────────────────────────────────────
+const LAUNCH_T0 = Date.now();
+let launchHidden = false;
+function launchStatus(msg, pct) {
+  const s = document.getElementById('launch-status'); if (s && msg != null) s.textContent = msg;
+  const b = document.getElementById('launch-bar');    if (b && pct != null) b.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+function hideLaunch() {
+  if (launchHidden) return; launchHidden = true;
+  const el = document.getElementById('launch-overlay'); if (!el) return;
+  const wait = Math.max(0, 900 - (Date.now() - LAUNCH_T0)); // min on-screen time so it never flashes
+  setTimeout(() => { el.classList.add('hidden'); setTimeout(() => { el.style.display = 'none'; }, 500); }, wait);
+}
+async function nativeAppVersion() {
+  const App = getNativePlugin('App'); if (!App) return null;
+  try { const i = await App.getInfo(); return i && i.version; } catch (e) { return null; }
+}
+function showApkGate(apkUrl, installedVer, needVer) {
+  const g = document.getElementById('apk-gate'); if (!g) return;
+  const vd = document.getElementById('apk-gate-ver');
+  if (vd) vd.textContent = (installedVer ? ('Installed v' + installedVer + '  →  ') : '') + 'Required v' + (needVer || '');
+  const btn = document.getElementById('apk-gate-btn');
+  if (btn) btn.onclick = () => {
+    const B = getNativePlugin('Browser');
+    if (B && B.open) B.open({ url: apkUrl }); else location.href = apkUrl;
+  };
+  hideLaunch();
+  g.classList.remove('hidden');
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
-loadLocal();
-loadUI();
-loadAuth();
-render();
-document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
+async function boot() {
+  loadLocal();
+  loadUI();
+  loadAuth();
+  render();
+  document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
+  launchStatus('Loading…', 20);
 
-if (IN_GAS) {
-  if (auth && auth.idToken) pullFromSheets(); // token may be stale — sync retries auth silently
-  else showLogin(true);
+  // Confirm this bundle so capgo doesn't roll it back, then hand off the native splash.
+  const Updater = getNativePlugin('CapacitorUpdater');
+  if (Updater) { try { await Updater.notifyAppReady(); } catch (e) {} }
+  const Splash = getNativePlugin('SplashScreen');
+  if (Splash) { try { await Splash.hide(); } catch (e) {} }
+
+  // Fetch the update feed once; use it for both the native gate and the web update.
+  launchStatus('Checking for updates…', 55);
+  const info = await fetchVersionInfo();
+
+  // Mandatory native gate: installed APK too old for the current web bundle.
+  if (info && info.minApk) {
+    const nv = await nativeAppVersion();
+    if (nv && cmpVer(nv, info.minApk) < 0) { showApkGate(info.apkUrl || '', nv, info.minApk); return; }
+  }
+
+  // Not signed in → login screen.
+  if (IN_GAS && !(auth && auth.idToken)) { hideLaunch(); showLogin(true); return; }
+
+  // Seamless web bundle update (may reload the app).
+  await applyWebUpdate(info);
+
+  // Pull shared data from the sheet.
+  if (IN_GAS) { launchStatus('Syncing…', 80); await pullFromSheets(); }
+
+  launchStatus('Ready', 100);
+  hideLaunch();
 }
-checkForAppUpdate();
+boot();
 
 // Re-pull shared data whenever the app comes back to the foreground,
 // so changes made on another phone show up.
