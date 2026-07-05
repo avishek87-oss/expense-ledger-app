@@ -8,6 +8,17 @@ $root = $PSScriptRoot
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be like 1.2.3" }
 
+# Run git without letting its harmless stderr warnings (e.g. LF/CRLF) abort the
+# script under ErrorActionPreference=Stop. Only a non-zero exit code is a failure.
+function Invoke-Git {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  & git -c user.name='Avishek' -c user.email='avishek87@gmail.com' @args 2>&1 | ForEach-Object { "$_" }
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) { throw "git $($args -join ' ') failed (exit $code)" }
+}
+
 # 1. Bump APP_VERSION in the source
 $idx  = "$root\www\index.html"
 $html = [IO.File]::ReadAllText($idx)
@@ -32,7 +43,7 @@ $repo = gh repo view --json nameWithOwner -q .nameWithOwner
 $vjson = @{ version = $Version; url = "https://github.com/$repo/releases/download/v$Version/bundle.zip" } | ConvertTo-Json
 [IO.File]::WriteAllText("$root\version.json", $vjson, (New-Object Text.UTF8Encoding $false))
 
-git add www/index.html version.json
-git commit -m "Release v$Version"
-git push
+Invoke-Git add www/index.html version.json
+Invoke-Git commit -m "Release v$Version"
+Invoke-Git push
 Write-Host "`nReleased v$Version - installed apps will update on next open."
