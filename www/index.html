@@ -477,7 +477,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1335,13 +1335,19 @@ function paidBtn(key, paid) {
   }
   return `<button class="pbtn due" onclick="startPayment('fixed','${key}')">Mark paid</button>`;
 }
+function editFixedDate(key, val) {
+  const md = getMD();
+  updateMonth({ payDate:{ ...(md.payDate||{}), [key]: val } });
+}
 function ledgerRow(key, label, sub, amount, paid, controls='') {
+  const pd = (getMD().payDate||{})[key] || '';
   return `
 <div class="lrow">
   <div class="lrow-main">
     <div class="lrow-left">
       <div class="lrow-label">${esc(label)}</div>
       ${sub?`<div class="lrow-sub">${sub}</div>`:''}
+      ${dateChip(pd, `onchange="editFixedDate('${key}',this.value)"`)}
     </div>
     <div class="lrow-right">
       <span class="lrow-amt">₹${inr(amount)}</span>
