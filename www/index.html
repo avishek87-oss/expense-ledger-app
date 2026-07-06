@@ -7,24 +7,25 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="HandheldFriendly" content="True">
 <meta name="MobileOptimized" content="375">
-<meta name="theme-color" content="#1f2a24">
+<meta name="theme-color" content="#171b21">
 <link rel="manifest" id="pwa-manifest">
 <title>Household Ledger</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f1ece0; --card:#fcfaf4; --card-2:#fbf8f1;
-  --ink:#1f2a24; --ink-soft:#4a4437;
-  --muted:#847b6a; --faint:#b3ab98;
-  --border:#ddd5c4; --line:#e8e1d1;
-  --maroon:#8b3a3a; --maroon-soft:#b47474;
-  --green:#3f5344; --green-soft:#8a9686;
-  --cream:#f7f4ec;
-  --serif:Georgia,'Iowan Old Style','Times New Roman',serif;
+  --bg:#eef1f4; --card:#ffffff; --card-2:#f4f6f8;
+  --ink:#171b21; --ink-soft:#3b4453;
+  --muted:#6b7684; --faint:#a7b0ba;
+  --border:#dde2e7; --line:#e8ebee;
+  --maroon:#b8433c; --maroon-soft:#d99b96;
+  --green:#2f7a5c; --green-soft:#8fbfa8;
+  --cream:#eef1f4;
+  --accent:#3452c0; --accent-soft:#9fb0e0;
+  --serif:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
-  --shadow:0 1px 2px rgba(31,42,36,.035),0 6px 20px rgba(31,42,36,.05);
-  --radius:8px;
+  --shadow:0 1px 2px rgba(20,30,50,.04),0 6px 20px rgba(20,30,50,.06);
+  --radius:10px;
 }
 html{-webkit-text-size-adjust:100%}
 body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased}
@@ -37,7 +38,7 @@ button{color:inherit}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
 
 /* ══ Header ══ */
-#hdr{position:sticky;top:0;z-index:100;background:rgba(241,236,224,.92);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border);padding:12px 16px 0;padding-top:calc(12px + env(safe-area-inset-top))}
+#hdr{position:sticky;top:0;z-index:100;background:rgba(238,241,244,.92);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border);padding:12px 16px 0;padding-top:calc(12px + env(safe-area-inset-top))}
 #hdr-inner{max-width:1140px;margin:0 auto}
 #hdr-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #hdr h1{font-size:19px;letter-spacing:-0.015em;font-weight:600}
@@ -50,7 +51,7 @@ button{color:inherit}
 /* ── Tabs ── */
 #tab-bar{display:flex;gap:2px;margin-top:12px}
 .tab-btn{flex:0 0 auto;padding:9px 2px 10px;margin-right:22px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s;font-weight:600}
-.tab-btn.active{color:var(--ink);border-bottom-color:var(--maroon)}
+.tab-btn.active{color:var(--ink);border-bottom-color:var(--accent)}
 
 /* ── Month nav ── */
 #month-nav{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0}
@@ -77,7 +78,18 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .hstat .v{font-family:var(--mono);font-size:16px;margin-top:3px;color:var(--cream);font-variant-numeric:tabular-nums}
 .hstat .v.g{color:#a9c6a9}
 .hero-bar{height:8px;border-radius:99px;background:rgba(247,244,236,.14);margin-top:18px;overflow:hidden}
-.hero-bar>i{display:block;height:100%;background:linear-gradient(90deg,#6e8570,#93ab8f);border-radius:99px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.hero-bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#5c7fe0);border-radius:99px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.hero{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hero-chev{font-size:14px;color:rgba(238,241,244,.55);transition:transform .25s ease;display:inline-block;margin-left:8px}
+.hero.expanded .hero-chev{transform:rotate(180deg)}
+.hero-spends-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.3,.8,.4,1)}
+.hero.expanded .hero-spends-wrap{grid-template-rows:1fr}
+.hero-spends-wrap>.hero-spends{overflow:hidden;min-height:0}
+.hero-spends-inner{padding-top:16px;margin-top:16px;border-top:1px solid rgba(238,241,244,.14)}
+.hspend-h{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:rgba(238,241,244,.5);font-weight:700;margin-bottom:8px}
+.hspend-h + .hspend-h{margin-top:14px}
+.hspend-row{display:flex;justify-content:space-between;font-family:var(--sans);font-size:13px;padding:5px 0;color:#dfe4ea}
+.hspend-row.due span{color:#e8a39c}
 .hero-foot{display:flex;align-items:baseline;justify-content:space-between;margin-top:9px;font-family:var(--sans);font-size:11px;color:rgba(247,244,236,.6)}
 .hero-foot .mono{color:rgba(247,244,236,.82)}
 
@@ -256,6 +268,10 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .menu-sw{display:flex;gap:6px;margin:6px 0 16px}
 .menu-sw-btn{flex:1;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:9px 6px;font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;line-height:1.25;-webkit-tap-highlight-color:transparent}
 .menu-sw-btn.on{background:var(--ink);color:var(--cream);border-color:var(--ink)}
+.menu-link{display:flex;align-items:center;justify-content:space-between;padding:16px 2px;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:15px;color:var(--ink);font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.menu-link span{color:var(--faint)}
+.menu-link.danger{border-bottom:none;color:var(--maroon);margin-top:8px}
+.menu-home-btn{display:block;background:none;border:none;color:var(--accent);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;padding:2px 0 16px;-webkit-tap-highlight-color:transparent}
 .cc-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
 .cc-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
 .cc-name{font-family:var(--serif);font-size:17px;font-weight:600}
@@ -309,41 +325,41 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 <body>
 
 <!-- Launch splash: first painted element, inline styles so it shows before the main stylesheet loads (seamless handoff from the native splash). -->
-<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f1ece0;transition:opacity .45s ease">
+<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1f4;transition:opacity .45s ease">
   <div id="launch-logo" style="width:96px;height:96px">
     <svg viewBox="0 0 512 512" width="96" height="96" xmlns="http://www.w3.org/2000/svg">
-      <rect width="512" height="512" rx="80" fill="#1f2a24"/>
-      <rect x="130" y="110" width="252" height="292" rx="12" fill="#f7f4ec"/>
-      <rect x="158" y="170" width="196" height="18" rx="4" fill="#1f2a24"/>
-      <rect x="158" y="210" width="196" height="18" rx="4" fill="#1f2a24"/>
-      <rect x="158" y="250" width="140" height="18" rx="4" fill="#1f2a24"/>
-      <rect x="158" y="310" width="80" height="28" rx="4" fill="#8b3a3a"/>
-      <rect x="258" y="310" width="96" height="28" rx="4" fill="#3f5344"/>
+      <rect width="512" height="512" rx="80" fill="#171b21"/>
+      <rect x="130" y="110" width="252" height="292" rx="12" fill="#eef1f4"/>
+      <rect x="158" y="170" width="196" height="18" rx="4" fill="#171b21"/>
+      <rect x="158" y="210" width="196" height="18" rx="4" fill="#171b21"/>
+      <rect x="158" y="250" width="140" height="18" rx="4" fill="#171b21"/>
+      <rect x="158" y="310" width="80" height="28" rx="4" fill="#b8433c"/>
+      <rect x="258" y="310" width="96" height="28" rx="4" fill="#3452c0"/>
     </svg>
   </div>
-  <div style="margin-top:22px;font-family:Georgia,serif;font-size:22px;font-weight:700;color:#1f2a24">Household Ledger</div>
-  <div style="margin-top:4px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#847b6a">Avishek Family</div>
-  <div id="launch-track" style="margin-top:34px;width:180px;height:4px;border-radius:999px;background:#ddd5c4;overflow:hidden">
-    <div id="launch-bar" style="height:100%;width:8%;border-radius:999px;background:#3f5344;transition:width .4s ease"></div>
+  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:#171b21">Household Ledger</div>
+  <div style="margin-top:4px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#6b7684">Avishek Family</div>
+  <div id="launch-track" style="margin-top:34px;width:180px;height:4px;border-radius:999px;background:#dde2e7;overflow:hidden">
+    <div id="launch-bar" style="height:100%;width:8%;border-radius:999px;background:#3452c0;transition:width .4s ease"></div>
   </div>
-  <div id="launch-status" style="margin-top:14px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12.5px;color:#847b6a;min-height:16px">Starting…</div>
+  <div id="launch-status" style="margin-top:14px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12.5px;color:#6b7684;min-height:16px">Starting…</div>
 </div>
 
 <!-- Mandatory native-update gate (shown only when the installed APK is too old for the current web bundle). -->
-<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f1ece0;padding:28px;text-align:center">
+<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1f4;padding:28px;text-align:center">
   <svg viewBox="0 0 512 512" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
-    <rect width="512" height="512" rx="80" fill="#1f2a24"/>
-    <rect x="130" y="110" width="252" height="292" rx="12" fill="#f7f4ec"/>
-    <rect x="158" y="170" width="196" height="18" rx="4" fill="#1f2a24"/>
-    <rect x="158" y="210" width="196" height="18" rx="4" fill="#1f2a24"/>
-    <rect x="158" y="250" width="140" height="18" rx="4" fill="#1f2a24"/>
-    <rect x="158" y="310" width="80" height="28" rx="4" fill="#8b3a3a"/>
-    <rect x="258" y="310" width="96" height="28" rx="4" fill="#3f5344"/>
+    <rect width="512" height="512" rx="80" fill="#171b21"/>
+    <rect x="130" y="110" width="252" height="292" rx="12" fill="#eef1f4"/>
+    <rect x="158" y="170" width="196" height="18" rx="4" fill="#171b21"/>
+    <rect x="158" y="210" width="196" height="18" rx="4" fill="#171b21"/>
+    <rect x="158" y="250" width="140" height="18" rx="4" fill="#171b21"/>
+    <rect x="158" y="310" width="80" height="28" rx="4" fill="#b8433c"/>
+    <rect x="258" y="310" width="96" height="28" rx="4" fill="#3452c0"/>
   </svg>
-  <div style="margin-top:22px;font-family:Georgia,serif;font-size:21px;font-weight:700;color:#1f2a24">Update required</div>
-  <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:#4a4437">A new version of the app is available. Please download and install it to continue.</div>
-  <button id="apk-gate-btn" style="margin-top:26px;background:#1f2a24;color:#f7f4ec;border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
-  <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:#b3ab98"></div>
+  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:#171b21">Update required</div>
+  <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:#3b4453">A new version of the app is available. Please download and install it to continue.</div>
+  <button id="apk-gate-btn" style="margin-top:26px;background:#171b21;color:#eef1f4;border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
+  <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:#a7b0ba"></div>
 </div>
 
 <div id="hdr">
@@ -413,7 +429,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 window.onerror = function (msg, src, line, col) {
   try {
     var d = document.createElement('div');
-    d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#8b3a3a;color:#fff;font:12px/1.5 monospace;padding:10px;z-index:9999;white-space:pre-wrap;word-break:break-all';
+    d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#b8433c;color:#fff;font:12px/1.5 monospace;padding:10px;z-index:9999;white-space:pre-wrap;word-break:break-all';
     d.textContent = 'App error: ' + msg + '  [line ' + line + ':' + col + ']';
     (document.body || document.documentElement).appendChild(d);
   } catch (e) {}
@@ -426,13 +442,13 @@ window.addEventListener('unhandledrejection', function (ev) {
 <script>
 // ── PWA Manifest ─────────────────────────────────────────────────────────────
 (function(){
-  const icon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%231f2a24'/%3E%3Crect x='130' y='110' width='252' height='292' rx='12' fill='%23f7f4ec'/%3E%3Crect x='158' y='170' width='196' height='18' rx='4' fill='%231f2a24'/%3E%3Crect x='158' y='210' width='196' height='18' rx='4' fill='%231f2a24'/%3E%3Crect x='158' y='250' width='140' height='18' rx='4' fill='%231f2a24'/%3E%3Crect x='158' y='310' width='80' height='28' rx='4' fill='%238b3a3a'/%3E%3Crect x='258' y='310' width='96' height='28' rx='4' fill='%233f5344'/%3E%3C/svg%3E";
+  const icon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%23171b21'/%3E%3Crect x='130' y='110' width='252' height='292' rx='12' fill='%23eef1f4'/%3E%3Crect x='158' y='170' width='196' height='18' rx='4' fill='%23171b21'/%3E%3Crect x='158' y='210' width='196' height='18' rx='4' fill='%23171b21'/%3E%3Crect x='158' y='250' width='140' height='18' rx='4' fill='%23171b21'/%3E%3Crect x='158' y='310' width='80' height='28' rx='4' fill='%23b8433c'/%3E%3Crect x='258' y='310' width='96' height='28' rx='4' fill='%233452c0'/%3E%3C/svg%3E";
   const m = {
     name: 'Household Ledger', short_name: 'Ledger',
     description: 'Avishek Family Household Ledger',
     start_url: location.href.split('?')[0],
     display: 'standalone', orientation: 'portrait',
-    background_color: '#f1ece0', theme_color: '#1f2a24',
+    background_color: '#eef1f4', theme_color: '#171b21',
     icons: [{ src: icon, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }]
   };
   const blob = new Blob([JSON.stringify(m)], { type: 'application/manifest+json' });
@@ -477,7 +493,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -500,7 +516,8 @@ let uiPrefs = { collapsed: {} };
 let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
 let miscDrafts = {};
 let pendingPay = null;
-let menuView = 'cc'; // hamburger drawer: 'cc' | 'spends' | 'source'
+let menuView = 'home'; // hamburger drawer: 'home' | 'cc'
+let heroSpendsOpen = false;
 
 function todayMonthKey() {
   const n = new Date();
@@ -1228,20 +1245,52 @@ function monthCategoryTotals(mk) {
   return { maids, aavia, fixed, household, neha, avishek, total: maids+aavia+fixed+household+neha+avishek };
 }
 
+// ── Hero: tap-to-expand Monthly Spends / Source of Spends (current month) ──
+function toggleHeroSpends() { heroSpendsOpen = !heroSpendsOpen; render(); }
+function heroSpendsHtml(mk) {
+  const t = monthCategoryTotals(mk);
+  const cats = [['maids','Maids'],['aavia','Aavia'],['fixed','Fixed'],['household','Household'],['neha','Neha'],['avishek','Avishek']];
+  const catRows = cats.filter(([k]) => t[k] > 0.5).map(([k,lbl]) =>
+    `<div class="hspend-row"><span>${lbl}</span><span class="mono">₹${inr(t[k])}</span></div>`).join('')
+    || `<div class="hspend-row"><span>Nothing tracked yet</span><span></span></div>`;
+
+  const paid = collectPaidItems(mk);
+  const byM = {};
+  paid.forEach(it => { if (it.method) byM[it.method] = (byM[it.method]||0) + it.amount; });
+  const paidSum = paid.reduce((s,it) => s+it.amount, 0);
+  const unpaid  = Math.max(0, t.total - paidSum);
+  const srcRows = PAY_METHODS.filter(m => byM[m.key]).map(m =>
+    `<div class="hspend-row"><span>${m.label}</span><span class="mono">₹${inr(byM[m.key])}</span></div>`).join('');
+  const unpaidRow = unpaid > 0.5
+    ? `<div class="hspend-row due"><span>Unpaid</span><span class="mono">₹${inr(unpaid)}</span></div>` : '';
+
+  return `<div class="hero-spends-inner">
+    <div class="hspend-h">Monthly Spends</div>
+    ${catRows}
+    <div class="hspend-h">Source of Spends</div>
+    ${srcRows || unpaidRow ? srcRows+unpaidRow : `<div class="hspend-row"><span>Nothing paid yet</span><span></span></div>`}
+  </div>`;
+}
+
 // ── Hamburger drawer ───────────────────────────────────────────────────────
-function openMenu()  { renderMenu(); document.getElementById('menu-overlay').classList.remove('hidden'); }
+function openMenu()  { menuView = 'home'; renderMenu(); document.getElementById('menu-overlay').classList.remove('hidden'); }
 function closeMenu() { document.getElementById('menu-overlay').classList.add('hidden'); }
 function setMenuView(v) { menuView = v; renderMenu(); }
+function signOut() { try { localStorage.removeItem(AUTH_KEY); } catch(e){} auth = null; closeMenu(); location.reload(); }
 function renderMenu() {
   const el = document.getElementById('menu-content');
+  const titleEl = document.getElementById('menu-title');
   if (!el) return;
-  const tabs = [['cc','Credit Card Payments'],['spends','Monthly Spends'],['source','Source of spends']];
-  const sw = `<div class="menu-sw">` + tabs.map(([k,l]) =>
-    `<button class="menu-sw-btn${menuView===k?' on':''}" onclick="setMenuView('${k}')">${l}</button>`).join('') + `</div>`;
-  const body = menuView==='spends' ? monthlySpendsHtml()
-             : menuView==='source' ? sourceSpendsHtml()
-             : ccSectionHtml();
-  el.innerHTML = sw + body;
+  if (menuView === 'cc') {
+    if (titleEl) titleEl.textContent = 'Credit Card Payments';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + ccSectionHtml();
+    return;
+  }
+  if (titleEl) titleEl.textContent = 'Menu';
+  el.innerHTML = `
+    <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
+    <a class="menu-link danger" onclick="signOut()">Sign out</a>
+  `;
 }
 function ccSectionHtml() {
   let html = '';
@@ -1253,12 +1302,15 @@ function ccSectionHtml() {
         <span class="cc-name">${cfg.label}</span>
         <span class="cc-out ${b.outstanding>0?'due':'ok'}">₹${inr(Math.max(0,b.outstanding))} <small>owed</small></span>
       </div>`;
-    html += b.cycles.length
-      ? b.cycles.map(c => `<div class="cc-cyc">
+    // Hide fully-paid cycles — once a month's bill is settled it drops off the list.
+    const visible = b.cycles.filter(c => c.statusClass !== 'ok');
+    html += visible.length
+      ? visible.map(c => `<div class="cc-cyc">
           <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
           <div class="cc-cyc-amt">₹${inr(c.total)}</div>
         </div>`).join('')
-      : `<div class="cc-empty">No spends on this card yet</div>`;
+      : (b.cycles.length ? `<div class="cc-empty">All cycles paid up ✓</div>`
+                         : `<div class="cc-empty">No spends on this card yet</div>`);
     const pays = getCcPayments()[cardKey];
     if (pays.length) html += `<div class="cc-pays">` + pays.map((p,i) =>
       `<div class="cc-pay"><span>Paid ₹${inr(p.amount)} · ${fmtDMY(new Date(p.date))}</span><button class="cc-del" onclick="deleteCcPayment('${cardKey}',${i})" aria-label="delete">✕</button></div>`).join('') + `</div>`;
@@ -1557,7 +1609,7 @@ function render() {
 
   // ── Hero ────────────────────────────────────────────────────────────
   document.getElementById('summary').innerHTML = `
-<div class="hero">
+<div class="hero${heroSpendsOpen?' expanded':''}" onclick="toggleHeroSpends()">
   <div class="hero-row">
     <div class="hero-lead">
       <div class="hero-lbl">Still to pay</div>
@@ -1571,8 +1623,9 @@ function render() {
   <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
   <div class="hero-foot">
     <span><span class="mono">${pct}%</span> settled</span>
-    <span>${pendingTot<=0.5?'All cleared 🎉':`<span class="mono">₹${inr(paidTot)}</span> of <span class="mono">₹${inr(grandTot)}</span>`}</span>
+    <span style="display:flex;align-items:center;gap:4px">${pendingTot<=0.5?'All cleared 🎉':`<span class="mono">₹${inr(paidTot)}</span><span>&nbsp;of&nbsp;</span><span class="mono">₹${inr(grandTot)}</span>`}<span class="hero-chev">⌄</span></span>
   </div>
+  <div class="hero-spends-wrap"><div class="hero-spends">${heroSpendsHtml(currentMonth)}</div></div>
 </div>`;
 
   // ── Section bodies ──────────────────────────────────────────────────
