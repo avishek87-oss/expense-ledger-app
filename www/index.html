@@ -596,6 +596,31 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   <div id="cc-cyc-review-content" onclick="event.stopPropagation()"></div>
 </div>
 
+<div id="cc-cyc-edit-overlay" class="cc-cyc-review-overlay hidden" onclick="cancelCycleEdit()">
+  <div class="pay-sheet" onclick="event.stopPropagation()" style="max-height:90vh;overflow-y:auto">
+    <div class="pay-sheet-title">Edit Transaction</div>
+    <div class="cc-pay-fields">
+      <label style="display:block;margin-bottom:4px;font-size:12px;color:var(--muted)">Date</label>
+      <input id="cc-cyc-edit-date" class="cc-date" type="date">
+      <label style="display:block;margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)">Description</label>
+      <input id="cc-cyc-edit-desc" class="base-inp" type="text" placeholder="Description">
+      <label style="display:block;margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)">Amount (₹)</label>
+      <input id="cc-cyc-edit-amount" class="misc-amt" type="number" inputmode="numeric" placeholder="Amount">
+      <label style="display:block;margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)">Category</label>
+      <select id="cc-cyc-edit-cat" class="sel" style="width:100%">
+        <option value="groceries">Groceries</option>
+        <option value="householdGroceries">Household Groceries</option>
+        <option value="householdMisc">Household Misc</option>
+        <option value="aaviaMisc">Aavia Misc</option>
+        <option value="nehaMisc">Neha Misc</option>
+        <option value="avishekMisc">Avishek Misc</option>
+      </select>
+    </div>
+    <button class="add-btn cc-pay-confirm" onclick="saveCycleEdit()">Save</button>
+    <button class="pay-cancel" onclick="cancelCycleEdit()">Cancel</button>
+  </div>
+</div>
+
 <script>
 // Crash catcher: paints any JS error on screen so failures are never silent.
 // Lives in its own script block so it also catches parse errors in the main script.
@@ -666,7 +691,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1544,7 +1569,6 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
     const md = getMDFor(mk);
     const mkDate = new Date(mk + '-15');
     if (mkDate < cycleStart || mkDate > cycleEnd) return;
-    // Collect items from all arrays where paid with this card
     ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'].forEach(cat => {
       (md[cat]||[]).forEach((it, i) => {
         if (it.paid && it.payMethod === cardKey) {
@@ -1553,40 +1577,84 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
       });
     });
   });
+  txns.sort((a, b) => new Date(a.date) - new Date(b.date));
   const cycleTotal = txns.reduce((s, t) => s + t.amount, 0);
-  let html = `<div class="cc-cyc-review-header">
-    <span class="cc-cyc-review-title">${esc(label)}</span>
-    <span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span>
-  </div>`;
+  let html = `<div class="cc-cyc-review-header"><span class="cc-cyc-review-title">${esc(label)}</span><span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span></div>`;
   if (txns.length) {
-    html += txns.map((t, idx) => `<div class="cc-cyc-txn-row" data-mk="${t.mk}" data-cat="${t.cat}" data-idx="${t.i}">
-      <span class="cc-txn-date">${fmtDMY(new Date(t.date))}</span>
-      <span class="cc-txn-desc" onclick="editCycleTransactionField('${t.mk}','${t.cat}',${t.i},'text')" title="Click to edit">${esc(t.desc.substring(0,30))}</span>
-      <span class="cc-txn-amt" onclick="editCycleTransactionField('${t.mk}','${t.cat}',${t.i},'amount')" title="Click to edit">₹${inr(t.amount)}</span>
-      <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" aria-label="delete">×</button>
-    </div>`).join('');
+    const byMonth = {};
+    txns.forEach(t => {
+      if (!byMonth[t.mk]) byMonth[t.mk] = [];
+      byMonth[t.mk].push(t);
+    });
+    Object.keys(byMonth).sort().forEach(mk => {
+      const monthTxns = byMonth[mk];
+      const monthTotal = monthTxns.reduce((s, t) => s + t.amount, 0);
+      const monthLabel = monthShort(mk);
+      html += `<div class="cc-cyc-month-sec" style="margin:12px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+        <div class="cc-cyc-month-hd" style="background:var(--card);padding:10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-weight:600;font-size:13px">
+          <span>${monthLabel}</span>
+          <span class="cc-cyc-month-total">₹${inr(monthTotal)}</span>
+        </div>
+        <div>`;
+      monthTxns.forEach(t => {
+        html += `<div class="cc-cyc-txn-row" style="display:flex;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line);font-size:13px">
+          <span style="flex:0 0 55px;color:var(--muted);font-size:12px">${fmtDMY(new Date(t.date))}</span>
+          <span style="flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.desc.substring(0,40))}</span>
+          <span style="flex:0 0 70px;text-align:right;font-family:var(--mono);font-weight:500;color:var(--ink)">₹${inr(t.amount)}</span>
+          <button class="cc-cyc-edit-btn" onclick="openCycleEditForm('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">✎</button>
+          <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">×</button>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
   } else {
     html += `<div class="cc-empty">No transactions in this cycle</div>`;
   }
-  html += `<div class="cc-cyc-review-actions">
-    <button class="add-btn" style="width:100%;margin-top:10px" onclick="confirmCycleReview()">Confirm & Pay</button>
-    <button class="pay-cancel" onclick="closeCycleReview()">Cancel</button>
-  </div>`;
+  html += `<div class="cc-cyc-review-actions"><button class="add-btn" style="width:100%;margin-top:10px" onclick="confirmCycleReview()">Confirm & Pay</button><button class="pay-cancel" onclick="closeCycleReview()">Cancel</button></div>`;
   return html;
 }
-function editCycleTransactionField(mk, cat, i, field) {
+let pendingCycleEdit = null;
+function openCycleEditForm(mk, cat, i) {
   const tmd = getMDFor(mk);
   const it = (tmd[cat]||[])[i];
   if (!it) return;
-  const oldVal = field === 'amount' ? it.amount : field === 'date' ? it.date : it.text||'';
-  const newVal = prompt(field === 'amount' ? 'New amount (₹):' : field === 'date' ? 'New date (YYYY-MM-DD):' : 'New description:', oldVal);
-  if (newVal === null || newVal === oldVal) return;
-  const patch = { ...it };
-  if (field === 'amount') patch.amount = Math.round(Number(newVal)||0);
-  else if (field === 'date') patch.date = newVal;
-  else patch.text = newVal.trim();
-  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).map((x,idx) => idx===i ? patch : x) });
-  // Re-render the cycle review to show updated total
+  pendingCycleEdit = { mk, cat, i, cardKey: pendingCycleReview.cardKey, cycleKey: pendingCycleReview.cycleKey };
+  document.getElementById('cc-cyc-edit-date').value = it.date;
+  document.getElementById('cc-cyc-edit-desc').value = it.text || it.vendor || '';
+  document.getElementById('cc-cyc-edit-amount').value = Math.round(it.amount);
+  document.getElementById('cc-cyc-edit-cat').value = cat;
+  document.getElementById('cc-cyc-edit-overlay').classList.remove('hidden');
+}
+function cancelCycleEdit() {
+  pendingCycleEdit = null;
+  document.getElementById('cc-cyc-edit-overlay').classList.add('hidden');
+}
+function saveCycleEdit() {
+  if (!pendingCycleEdit) return;
+  const { mk, cat, i, cardKey, cycleKey } = pendingCycleEdit;
+  const newDate = document.getElementById('cc-cyc-edit-date').value;
+  const newDesc = document.getElementById('cc-cyc-edit-desc').value.trim();
+  const newAmount = Math.round(Number(document.getElementById('cc-cyc-edit-amount').value)||0);
+  const newCat = document.getElementById('cc-cyc-edit-cat').value;
+  if (!newDate || !newDesc || newAmount <= 0) { alert('All fields required'); return; }
+  const tmd = getMDFor(mk);
+  const it = (tmd[cat]||[])[i];
+  if (!it) return;
+  const patch = { ...it, date: newDate, text: newDesc, amount: newAmount, paid: true, payMethod: cardKey };
+  const newMkForDate = clampMonth(monthKeyOf(newDate));
+  const updates = {};
+  if (newCat === cat && newMkForDate === mk) {
+    updates[cat] = (tmd[cat]||[]).map((x, idx) => idx === i ? patch : x);
+    updateMonthFor(mk, updates);
+  } else {
+    updates[cat] = (tmd[cat]||[]).filter((_, idx) => idx !== i);
+    updateMonthFor(mk, updates);
+    const newMd = getMDFor(newMkForDate);
+    const newUpdates = {};
+    newUpdates[newCat] = [...(newMd[newCat]||[]), patch];
+    updateMonthFor(newMkForDate, newUpdates);
+  }
+  cancelCycleEdit();
   if (pendingCycleReview) {
     const html = ccCycleTransactionsHtml(pendingCycleReview.cardKey, pendingCycleReview.cycleKey, pendingCycleReview.label, pendingCycleReview.total);
     document.getElementById('cc-cyc-review-content').innerHTML = html;
