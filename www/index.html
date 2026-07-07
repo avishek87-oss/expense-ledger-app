@@ -311,6 +311,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pmth-btn{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:15px 12px;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
 .pmth-btn:hover{border-color:var(--ink);background:#fff}
 .pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
+#cc-pay-overlay{z-index:360} /* above the hamburger drawer (350) — CC screen lives inside it */
 .cc-pay-fields{display:flex;gap:8px;margin-bottom:12px}
 .cc-pay-fields .misc-amt{width:auto;flex:1;min-width:90px}
 .cc-pay-confirm{width:100%;min-height:50px;font-size:15px}
@@ -506,7 +507,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1359,10 +1360,23 @@ function ccSectionHtml() {
     const cycleLabelByKey = {};
     b.cycles.forEach(c => { cycleLabelByKey[c.key] = c.label; });
     const pays = getCcPayments()[cardKey];
-    if (pays.length) html += `<div class="cc-pays">` + pays.map((p,i) => {
-      const tag = p.cycleKey && cycleLabelByKey[p.cycleKey] ? ` (${cycleLabelByKey[p.cycleKey]})` : '';
-      return `<div class="cc-pay"><span>Paid ₹${inr(p.amount)} · ${fmtDMY(new Date(p.date))}${tag}</span><button class="cc-del" onclick="deleteCcPayment('${cardKey}',${i})" aria-label="delete">✕</button></div>`;
-    }).join('') + `</div>`;
+    // Payment log is hidden by default (collapsed) — recorded in the background
+    // for the balance math above, only shown if the user taps to expand it.
+    if (pays.length) {
+      const secId = 'cc-hist-'+cardKey;
+      const open = isOpen(secId, 0);
+      const rows = pays.map((p,i) => {
+        const tag = p.cycleKey && cycleLabelByKey[p.cycleKey] ? ` (${cycleLabelByKey[p.cycleKey]})` : '';
+        return `<div class="cc-pay"><span>Paid ₹${inr(p.amount)} · ${fmtDMY(new Date(p.date))}${tag}</span><button class="cc-del" onclick="deleteCcPayment('${cardKey}',${i})" aria-label="delete">✕</button></div>`;
+      }).join('');
+      html += `<section class="card${open?' open':''}" data-sec="${secId}" aria-expanded="${open?'true':'false'}" style="margin-top:12px">
+        <button class="card-hd" onclick="toggleCollapse('${secId}')">
+          <span class="chev" aria-hidden="true">›</span>
+          <span class="hd-main"><span class="hd-title" style="font-size:14px">Payment history</span><span class="hd-sub">${pays.length} payment${pays.length>1?'s':''}</span></span>
+        </button>
+        <div class="card-body-wrap"><div class="card-body">${rows}</div></div>
+      </section>`;
+    }
     html += `</section>`;
   });
   return html;
