@@ -598,7 +598,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 
 <div id="cc-cyc-edit-overlay" class="cc-cyc-review-overlay hidden" onclick="cancelCycleEdit()">
   <div class="pay-sheet" onclick="event.stopPropagation()" style="max-height:90vh;overflow-y:auto">
-    <div class="pay-sheet-title">Edit Transaction</div>
+    <div id="cc-cyc-edit-title" class="pay-sheet-title">Edit Transaction</div>
     <div style="display:flex;flex-direction:column;gap:14px;padding:0">
       <div>
         <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted)">Date</label>
@@ -699,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.2';
+const APP_VERSION = '2.4.3';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1573,6 +1573,9 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   const cycleWindow = ccCycleOf(cardKey, cycleKey);
   const cycleStart = cycleWindow.start, cycleEnd = cycleWindow.end;
   const txns = [];
+  const fixedAmt = { schoolFees:mk=>schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk), bizone:mk=>bizoneFee(mk), english:mk=>englishFee(mk) };
+  const fixedLabels = { schoolFees:'School Fees', bizone:'Bizone Fee', english:'English Classes' };
+  // Collect array-based transactions (editable)
   Object.keys(appState.months||{}).forEach(mk => {
     const md = getMDFor(mk);
     ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'].forEach(cat => {
@@ -1580,10 +1583,20 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
         if (it.paid && it.payMethod === cardKey) {
           const txnDate = new Date(it.date);
           if (txnDate >= cycleStart && txnDate <= cycleEnd) {
-            txns.push({ mk, cat, i, date: it.date, text: it.text||it.vendor||'', amount: Number(it.amount||0), desc: it.text||it.vendor||(cat.includes('Grocery')?'Grocery':'Item') });
+            txns.push({ mk, type:'item', cat, i, date: it.date, text: it.text||it.vendor||'', amount: Number(it.amount||0), desc: it.text||it.vendor||(cat.includes('Grocery')?'Grocery':'Item'), editable: true });
           }
         }
       });
+    });
+    // Collect fixed amount transactions (non-editable)
+    Object.keys(fixedAmt).forEach(key => {
+      if (md.paid[key] && (md.payMethod||{})[key] === cardKey) {
+        const amt = fixedAmt[key](mk);
+        const txnDate = new Date((md.payDate||{})[key] || (mk+'-15'));
+        if (txnDate >= cycleStart && txnDate <= cycleEnd) {
+          txns.push({ mk, type:'fixed', key, date: (md.payDate||{})[key] || (mk+'-15'), amount: amt, desc: fixedLabels[key], editable: false });
+        }
+      }
     });
   });
   txns.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -1606,12 +1619,13 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
         </div>
         <div>`;
       monthTxns.forEach(t => {
-        html += `<div class="cc-cyc-txn-row" style="display:flex;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line);font-size:13px">
+        const rowBg = t.editable ? '' : 'background:rgba(0,0,0,0.1)';
+        html += `<div class="cc-cyc-txn-row" style="display:flex;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line);font-size:13px;${rowBg}">
           <span style="flex:0 0 55px;color:var(--muted);font-size:12px">${fmtDMY(new Date(t.date))}</span>
-          <span style="flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.desc.substring(0,40))}</span>
+          <span style="flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:${t.editable?'1':'0.6'}">${esc(t.desc.substring(0,40))}${t.editable?'':'  (fixed)'}</span>
           <span style="flex:0 0 70px;text-align:right;font-family:var(--mono);font-weight:500;color:var(--ink)">₹${inr(t.amount)}</span>
-          <button class="cc-cyc-edit-btn" onclick="openCycleEditForm('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">✎</button>
-          <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">×</button>
+          ${t.editable ? `<button class="cc-cyc-edit-btn" onclick="openCycleEditForm('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">✎</button>
+          <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">×</button>` : '<span style="flex:0 0 64px"></span>'}
         </div>`;
       });
       html += `</div></div>`;
@@ -1627,11 +1641,17 @@ function openCycleEditForm(mk, cat, i) {
   const tmd = getMDFor(mk);
   const it = (tmd[cat]||[])[i];
   if (!it) return;
-  pendingCycleEdit = { mk, cat, i, cardKey: pendingCycleReview.cardKey, cycleKey: pendingCycleReview.cycleKey };
-  document.getElementById('cc-cyc-edit-date').value = it.date;
-  document.getElementById('cc-cyc-edit-desc').value = it.text || it.vendor || '';
-  document.getElementById('cc-cyc-edit-amount').value = Math.round(it.amount);
-  document.getElementById('cc-cyc-edit-cat').value = cat;
+  pendingCycleEdit = { mk, cat, i, type:'item', cardKey: pendingCycleReview.cardKey, cycleKey: pendingCycleReview.cycleKey };
+  const dateField = document.getElementById('cc-cyc-edit-date');
+  const descField = document.getElementById('cc-cyc-edit-desc');
+  const amtField = document.getElementById('cc-cyc-edit-amount');
+  const catField = document.getElementById('cc-cyc-edit-cat');
+  dateField.disabled = false; descField.disabled = false; amtField.disabled = false; catField.disabled = false;
+  dateField.value = it.date;
+  descField.value = it.text || it.vendor || '';
+  amtField.value = Math.round(it.amount);
+  catField.value = cat;
+  document.getElementById('cc-cyc-edit-title').textContent = 'Edit Transaction';
   document.getElementById('cc-cyc-edit-overlay').classList.remove('hidden');
 }
 function cancelCycleEdit() {
