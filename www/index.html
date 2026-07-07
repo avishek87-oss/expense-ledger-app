@@ -699,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.4';
+const APP_VERSION = '2.4.5';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1601,7 +1601,7 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   });
   txns.sort((a, b) => new Date(a.date) - new Date(b.date));
   const cycleTotal = txns.reduce((s, t) => s + t.amount, 0);
-  let html = `<div class="cc-cyc-review-header"><span class="cc-cyc-review-title">${esc(label)}</span><span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span></div>`;
+  let html = `<div class="cc-cyc-review-header" style="display:flex;justify-content:space-between;align-items:center"><div><span class="cc-cyc-review-title">${esc(label)}</span><span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span></div><button onclick="openCycleAddForm('${cardKey}')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:500">+ Add</button></div>`;
   if (txns.length) {
     html += `<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">`;
     txns.forEach(t => {
@@ -1645,28 +1645,35 @@ function cancelCycleEdit() {
 }
 function saveCycleEdit() {
   if (!pendingCycleEdit) return;
-  const { mk, cat, i, cardKey, cycleKey } = pendingCycleEdit;
   const newDate = document.getElementById('cc-cyc-edit-date').value;
   const newDesc = document.getElementById('cc-cyc-edit-desc').value.trim();
   const newAmount = Math.round(Number(document.getElementById('cc-cyc-edit-amount').value)||0);
   const newCat = document.getElementById('cc-cyc-edit-cat').value;
   if (!newDate || !newDesc || newAmount <= 0) { alert('All fields required'); return; }
-  const tmd = getMDFor(mk);
-  const it = (tmd[cat]||[])[i];
-  if (!it) return;
-  const patch = { ...it, date: newDate, text: newDesc, amount: newAmount, paid: true, payMethod: cardKey };
-  const newMkForDate = clampMonth(monthKeyOf(newDate));
-  const updates = {};
-  if (newCat === cat && newMkForDate === mk) {
-    updates[cat] = (tmd[cat]||[]).map((x, idx) => idx === i ? patch : x);
-    updateMonthFor(mk, updates);
+  if (pendingCycleEdit.type === 'add') {
+    const mk = clampMonth(monthKeyOf(newDate));
+    const newItem = { date: newDate, text: newDesc, amount: newAmount, paid: true, payMethod: pendingCycleEdit.cardKey };
+    const md = getMDFor(mk);
+    updateMonthFor(mk, { [newCat]: [...(md[newCat]||[]), newItem] });
   } else {
-    updates[cat] = (tmd[cat]||[]).filter((_, idx) => idx !== i);
-    updateMonthFor(mk, updates);
-    const newMd = getMDFor(newMkForDate);
-    const newUpdates = {};
-    newUpdates[newCat] = [...(newMd[newCat]||[]), patch];
-    updateMonthFor(newMkForDate, newUpdates);
+    const { mk, cat, i, cardKey } = pendingCycleEdit;
+    const tmd = getMDFor(mk);
+    const it = (tmd[cat]||[])[i];
+    if (!it) return;
+    const patch = { ...it, date: newDate, text: newDesc, amount: newAmount, paid: true, payMethod: cardKey };
+    const newMkForDate = clampMonth(monthKeyOf(newDate));
+    const updates = {};
+    if (newCat === cat && newMkForDate === mk) {
+      updates[cat] = (tmd[cat]||[]).map((x, idx) => idx === i ? patch : x);
+      updateMonthFor(mk, updates);
+    } else {
+      updates[cat] = (tmd[cat]||[]).filter((_, idx) => idx !== i);
+      updateMonthFor(mk, updates);
+      const newMd = getMDFor(newMkForDate);
+      const newUpdates = {};
+      newUpdates[newCat] = [...(newMd[newCat]||[]), patch];
+      updateMonthFor(newMkForDate, newUpdates);
+    }
   }
   cancelCycleEdit();
   if (pendingCycleReview) {
@@ -1683,6 +1690,20 @@ function deleteCycleTransaction(mk, cat, i) {
     const html = ccCycleTransactionsHtml(pendingCycleReview.cardKey, pendingCycleReview.cycleKey, pendingCycleReview.label, pendingCycleReview.total);
     document.getElementById('cc-cyc-review-content').innerHTML = html;
   }
+}
+function openCycleAddForm(cardKey) {
+  pendingCycleEdit = { type:'add', cardKey, cycleKey: pendingCycleReview.cycleKey };
+  const dateField = document.getElementById('cc-cyc-edit-date');
+  const descField = document.getElementById('cc-cyc-edit-desc');
+  const amtField = document.getElementById('cc-cyc-edit-amount');
+  const catField = document.getElementById('cc-cyc-edit-cat');
+  dateField.disabled = false; descField.disabled = false; amtField.disabled = false; catField.disabled = false;
+  dateField.value = today();
+  descField.value = '';
+  amtField.value = '';
+  catField.value = 'householdMisc';
+  document.getElementById('cc-cyc-edit-title').textContent = 'Add Transaction';
+  document.getElementById('cc-cyc-edit-overlay').classList.remove('hidden');
 }
 
 // Opens the bottom sheet for a Neha Bank <-> Avishek Bank transfer.
