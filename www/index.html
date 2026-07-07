@@ -413,6 +413,8 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   } catch(e){}
 })();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 
@@ -647,7 +649,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1410,6 +1412,7 @@ function confirmPay(method) {
   if (!pendingPay) return;
   const { type, args } = pendingPay;
   pendingPay = null;
+  doHaptic();
   document.getElementById('pay-overlay').classList.add('hidden');
 
   if (type === 'fixed') {
@@ -1783,8 +1786,13 @@ function swipeEnd() {
   if (lock !== 'h') return;
   const cat = row.dataset.cat, idx = Number(row.dataset.idx);
   const TH = 90;
-  if (dx < -TH)      { cat === 'groceries' ? deleteGrocery(idx)       : deleteMiscItem(cat, idx); }
-  else if (dx > TH)  { cat === 'groceries' ? startPayment('grocery', idx) : startPayment('misc', cat, idx); }
+  if (dx < -TH)      { doHaptic(); cat === 'groceries' ? deleteGrocery(idx)       : deleteMiscItem(cat, idx); }
+  else if (dx > TH)  { doHaptic(); cat === 'groceries' ? startPayment('grocery', idx) : startPayment('misc', cat, idx); }
+}
+function doHaptic(type='impact') {
+  const Haptics = getNativePlugin('Haptics');
+  if (!Haptics) return;
+  try { if (type==='impact') Haptics.impact({style:1}); } catch(e){}
 }
 function bindSwipe() {
   const body = document.getElementById('app-body');
@@ -1820,15 +1828,29 @@ function renderMenu() {
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + trendsSectionHtml();
     return;
   }
+  if (menuView === 'statement') {
+    if (titleEl) titleEl.textContent = 'Upload Statement';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + statementUploadHtml();
+    return;
+  }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
     <a class="menu-link" onclick="setMenuView('trends')">Trends <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('budgets')">Budgets <span>›</span></a>
+    <a class="menu-link" onclick="setMenuView('statement')">Upload Statement <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
+    <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
     <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
+}
+function notificationsLabel() { return (uiPrefs.notificationsEnabled ?? true) ? 'On' : 'Off'; }
+function cycleNotifications() {
+  uiPrefs.notificationsEnabled = !uiPrefs.notificationsEnabled;
+  saveUI();
+  if (uiPrefs.notificationsEnabled) scheduleNotifications();
+  renderMenu();
 }
 function ccSectionHtml() {
   let html = '';
@@ -2036,6 +2058,119 @@ function donutSvg(t) {
     </svg>
     <div class="donut-legend">${legend}</div>
   </div>`;
+}
+// ── CC Statement Upload + Reconciliation ──────────────────────────────────
+let stmtParsed = null; // holds {transactions: [...], matched: [...], unmatched: [...]}
+async function parseStatement(file, password) {
+  try {
+    if (!window.pdfjsLib) { alert('PDF library not loaded. Refresh and try again.'); return null; }
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer, password }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(t => t.str).join(' ') + '\n';
+    }
+    // Parse Axis statement: look for lines like "DD/MM/YYYY  Description  ₹Amount"
+    // Regex: date pattern, then description (any non-digits), then amount
+    const lines = text.split('\n');
+    const txns = [];
+    const dateRegex = /(\d{2})\/(\d{2})\/(\d{4})/;
+    const amountRegex = /₹?([\d,]+)\.?\d{0,2}$/;
+    lines.forEach(line => {
+      const dateMatch = line.match(dateRegex);
+      if (!dateMatch) return;
+      const [, day, month, year] = dateMatch;
+      const date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const afterDate = line.substring(dateMatch.index + dateMatch[0].length).trim();
+      const amountMatch = afterDate.match(amountRegex);
+      if (!amountMatch) return;
+      const amount = Number(amountMatch[1].replace(/,/g, ''));
+      const desc = afterDate.substring(0, amountMatch.index).trim();
+      if (desc && amount > 0) txns.push({ date, desc, amount });
+    });
+    return txns;
+  } catch (e) {
+    console.error('PDF parse error:', e);
+    alert('Failed to parse PDF. Check password and file format.');
+    return null;
+  }
+}
+function matchTransactions(stmtTxns) {
+  const appTxns = Object.keys(appState.months||{}).flatMap(mk => {
+    const md = getMDFor(mk);
+    return ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc']
+      .flatMap(cat => (md[cat]||[]).map((it,i) => ({ mk, cat, i, date: it.date, amount: Number(it.amount||0), text: it.text||it.vendor||'' })));
+  });
+  const matched = [], unmatched = [];
+  stmtTxns.forEach(stmt => {
+    const m = appTxns.find(app =>
+      app.amount === stmt.amount && Math.abs(new Date(app.date) - new Date(stmt.date)) / (1000*60*60*24) <= 2
+    );
+    if (m) matched.push({ stmt, app: m });
+    else unmatched.push(stmt);
+  });
+  return { matched, unmatched };
+}
+function statementUploadHtml() {
+  if (stmtParsed) {
+    // Show reconciliation UI
+    const { matched, unmatched } = stmtParsed;
+    let html = `<section class="cc-card">
+      <div class="cc-head"><span class="cc-name">Reconciliation</span></div>
+      <div class="cc-empty" style="padding-top:0">${matched.length} matched, ${unmatched.length} unmatched transaction(s).</div>`;
+    if (matched.length) {
+      html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Matched (greyed out):</strong></div>`;
+      matched.forEach(({stmt, app}) => {
+        html += `<div style="opacity:0.6;padding:6px 0;font-size:13px">₹${inr(stmt.amount)} · ${fmtDMY(new Date(stmt.date))} · ${esc(stmt.desc.substring(0,40))}</div>`;
+      });
+    }
+    if (unmatched.length) {
+      html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Unmatched — file or review:</strong></div>`;
+      unmatched.forEach((txn, i) => {
+        html += `<div class="stmt-unmatched" style="padding:8px;margin-bottom:8px;background:var(--card-2);border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:13px">₹${inr(txn.amount)} · ${fmtDMY(new Date(txn.date))}</div>
+          <button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="openFileUnmatched(${i})">File</button>
+        </div>`;
+      });
+    }
+    html += `<button class="add-btn" style="width:100%;margin-top:10px" onclick="resetStatement()">Done</button>`;
+    html += `</section>`;
+    return html;
+  }
+  // Show upload form
+  return `<section class="cc-card">
+    <div class="cc-head"><span class="cc-name">Axis CC Statement</span></div>
+    <div class="cc-empty" style="padding-top:0;font-size:13px">Upload a password-protected PDF statement. The app will match transactions and highlight unmatched charges for your review.</div>
+    <input id="stmt-file" class="base-inp" type="file" accept=".pdf" style="width:100%;margin-top:10px;margin-bottom:8px">
+    <input id="stmt-pwd" class="base-inp" type="password" placeholder="PDF password" style="width:100%;margin-bottom:8px">
+    <button class="add-btn" style="width:100%" onclick="submitStatementUpload()">Parse & Match</button>
+  </section>`;
+}
+async function submitStatementUpload() {
+  const file = document.getElementById('stmt-file').files[0];
+  const pwd = document.getElementById('stmt-pwd').value;
+  if (!file || !pwd) { alert('Please select a file and enter password'); return; }
+  const txns = await parseStatement(file, pwd);
+  if (!txns) return;
+  const { matched, unmatched } = matchTransactions(txns);
+  stmtParsed = { transactions: txns, matched, unmatched };
+  renderMenu();
+}
+function resetStatement() { stmtParsed = null; setMenuView('home'); }
+function openFileUnmatched(idx) {
+  const txn = stmtParsed.unmatched[idx];
+  const section = prompt('File into which section?\n\nHousehold, Neha, Avishek, Aavia');
+  if (!section) return;
+  const catMap = { household: 'householdMisc', neha: 'nehaMisc', avishek: 'avishekMisc', aavia: 'aaviaMisc' };
+  const cat = catMap[section.toLowerCase()];
+  if (!cat) { alert('Invalid section.'); return; }
+  const mk = clampMonth(monthKeyOf(txn.date));
+  const tmd = getMDFor(mk);
+  updateMonthFor(mk, { [cat]: [...(tmd[cat]||[]), { text: txn.desc, amount: txn.amount, date: txn.date, paid: true, payMethod: 'axisCC' }] });
+  stmtParsed.unmatched.splice(idx, 1);
+  renderMenu();
 }
 function menuMonths() {
   return Object.keys(appState.months||{}).filter(mk => mk >= MIN_MONTH).sort().reverse();
@@ -2727,6 +2862,28 @@ function showApkGate(apkUrl, installedVer, needVer) {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
+// ── Local Notifications (Bill due-date reminders) ─────────────────────────
+async function scheduleNotifications() {
+  if (!uiPrefs.notificationsEnabled) return;
+  const LocalNotif = getNativePlugin('LocalNotifications');
+  if (!LocalNotif) return;
+  const today = new Date();
+  const mo = today.getMonth() + 1, da = today.getDate();
+  const upcoming = [];
+  // Axis CC due 7th — notify on 5th
+  if (da <= 5) upcoming.push({ id:1, title:'Axis CC due', body:'Axis credit card payment due on the 7th', schedule: { at: new Date(today.getFullYear(), mo-1, 7, 9, 0) } });
+  // Scapia CC due 13th — notify on 11th
+  if (da <= 11) upcoming.push({ id:2, title:'Scapia CC due', body:'Scapia credit card payment due on the 13th', schedule: { at: new Date(today.getFullYear(), mo-1, 13, 9, 0) } });
+  // Rent assumed 1st — notify on 30th previous (or within first 3 days if after that)
+  if (da <= 3 || da === 30 || da === 31) {
+    const rentDay = da <= 3 ? new Date(today.getFullYear(), mo-1, 1, 9, 0) : new Date(today.getFullYear(), mo, 1, 9, 0);
+    upcoming.push({ id:3, title:'Rent payment due', body:'Monthly rent payment due', schedule: { at: rentDay } });
+  }
+  if (upcoming.length) {
+    try { await LocalNotif.schedule({ notifications: upcoming }); } catch(e){}
+  }
+}
+
 async function boot() {
   loadLocal();
   loadUI();
@@ -2734,6 +2891,7 @@ async function boot() {
   loadAuth();
   render();
   bindSwipe();
+  scheduleNotifications();
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
   launchStatus('Loading…', 20);
 
@@ -2768,9 +2926,12 @@ async function boot() {
 boot();
 
 // Re-pull shared data whenever the app comes back to the foreground,
-// so changes made on another phone show up.
+// so changes made on another phone show up. Also reschedule notifications.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && IN_GAS) pullFromSheets();
+  if (document.visibilityState === 'visible') {
+    if (IN_GAS) pullFromSheets();
+    scheduleNotifications();
+  }
 });
 </script>
 </body>
