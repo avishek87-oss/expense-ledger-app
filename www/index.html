@@ -282,6 +282,8 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 #launch-overlay.hidden{opacity:0;pointer-events:none}
 #apk-gate.hidden{display:none!important}
 #apk-gate-btn:active{filter:brightness(1.25)}
+#lock-gate.hidden{display:none!important}
+#lock-gate-btn:active{filter:brightness(1.25)}
 /* Hamburger + drawer */
 #hmb{background:none;border:none;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;margin-right:2px;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent}
 .menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:350;display:flex}
@@ -472,6 +474,19 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:var(--ink-soft)">A new version of the app is available. Please download and install it to continue.</div>
   <button id="apk-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--bg);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
   <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:var(--faint)"></div>
+</div>
+
+<!-- Biometric/device-credential lock screen, shown on cold start and app resume. -->
+<div id="lock-gate" class="hidden" style="position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);padding:28px;text-align:center">
+  <svg viewBox="0 0 512 512" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
+    <rect width="512" height="512" rx="80" fill="#171b21"/>
+    <rect x="176" y="220" width="160" height="140" rx="14" fill="#eef1f4"/>
+    <path d="M206 220v-40a50 50 0 0 1 100 0v40" stroke="#eef1f4" stroke-width="22" fill="none"/>
+    <circle cx="256" cy="285" r="14" fill="#171b21"/>
+  </svg>
+  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:var(--ink)">Household Ledger locked</div>
+  <div id="lock-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:var(--ink-soft)">Unlock with your fingerprint, face, or device PIN to continue.</div>
+  <button id="lock-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--bg);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Unlock</button>
 </div>
 
 <div id="hdr">
@@ -703,7 +718,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.7.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -782,6 +797,76 @@ function emptyMonth() {
     bases:{}
   };
 }
+// Soft-delete trash (top-level, cross-month). Rides in the synced blob;
+// entries self-prune after 7 days so it never grows unbounded.
+function getTrash() { return appState.trash || []; }
+function moveToTrash(entry) {
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2);
+  appState = { ...appState, trash: [...getTrash(), { id, deletedAt: today(), ...entry }] };
+}
+function pruneTrash() {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+  const kept = getTrash().filter(t => new Date(t.deletedAt) >= cutoff);
+  if (kept.length !== getTrash().length) appState = { ...appState, trash: kept };
+}
+function openTrashView() { pruneTrash(); setMenuView('trash'); }
+
+// ── Activity log view — reads the separate ActivityLog sheet, not appState ──
+let activityEntries = [];
+let activityWindowDays = 7;
+let activityLoading = false;
+function openActivityView() {
+  activityWindowDays = 7;
+  setMenuView('activity');
+  loadActivityLog();
+}
+async function loadActivityLog() {
+  if (!IN_GAS || !auth || !auth.idToken) { activityEntries = []; renderMenu(); return; }
+  activityLoading = true; renderMenu();
+  try {
+    const since = new Date(Date.now() - activityWindowDays*24*60*60*1000).toISOString();
+    const url = GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken) + '&op=getLog&since=' + encodeURIComponent(since);
+    const res = await fetch(url);
+    const j = await res.json();
+    activityEntries = (j && j.ok && j.entries) || [];
+  } catch (e) {
+    activityEntries = [];
+  }
+  activityLoading = false;
+  renderMenu();
+}
+function loadOlderActivity() {
+  activityWindowDays += 7;
+  loadActivityLog();
+}
+function activitySectionHtml() {
+  if (activityLoading) {
+    return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div><div class="cc-empty" style="padding-top:0">Loading…</div></section>`;
+  }
+  const rows = activityEntries.map(e =>
+    `<div class="cc-pay"><span>${esc(e.email)} ${esc(e.entry)} · ${fmtDMY(new Date(e.ts))}</span></div>`
+  ).join('');
+  return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div>
+    ${activityEntries.length ? rows : `<div class="cc-empty" style="padding-top:0">No activity in the last ${activityWindowDays} days.</div>`}
+    <button class="add-btn" style="width:100%;margin-top:10px" onclick="loadOlderActivity()">Load older</button>
+  </section>`;
+}
+function restoreFromTrash(id) {
+  const entry = getTrash().find(t => t.id === id);
+  if (!entry) return;
+  appState = { ...appState, trash: getTrash().filter(t => t.id !== id) };
+  if (entry.kind === 'month') {
+    const md = getMDFor(entry.mk);
+    updateMonthFor(entry.mk, { [entry.cat]: [...(md[entry.cat]||[]), entry.item] });
+  } else if (entry.kind === 'nehaTransfer') {
+    const nb = getNehaBank();
+    saveNehaBank({ ...nb, transfers: [...nb.transfers, entry.item] });
+  } else if (entry.kind === 'ccPayment') {
+    const cur = getCcPayments();
+    saveCcPayments({ ...cur, [entry.cardKey]: [...cur[entry.cardKey], entry.item] });
+  }
+  renderMenu();
+}
 // Credit-card bill payments (top-level, cross-month). Rides in the synced blob.
 function getCcPayments() {
   const c = appState.ccPayments || {};
@@ -793,10 +878,11 @@ function getNehaBank() {
   const n = appState.nehaBank || {};
   return { initialBalance: Number(n.initialBalance||0), transfers: n.transfers || [] };
 }
-function saveNehaBank(next) {
+function saveNehaBank(next, logMsg) {
   pushUndo('Neha Bank change');
   appState = { ...appState, nehaBank: next };
   saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
+  logActivity(logMsg || 'updated Neha Bank');
 }
 function setNehaInitialBalance(val) {
   saveNehaBank({ ...getNehaBank(), initialBalance: Math.round(Number(val)||0) });
@@ -805,11 +891,14 @@ function addNehaTransfer(direction, amount, date) {
   const amt = Math.round(Number(amount));
   if (!(amt > 0)) return;
   const nb = getNehaBank();
-  saveNehaBank({ ...nb, transfers: [...nb.transfers, { amount:amt, date: date||today(), direction }] });
+  saveNehaBank({ ...nb, transfers: [...nb.transfers, { amount:amt, date: date||today(), direction }] },
+    `transferred ₹${amt} (${direction==='in'?'Avishek → Neha':'Neha → Avishek'})`);
 }
 function deleteNehaTransfer(idx) {
   const nb = getNehaBank();
-  saveNehaBank({ ...nb, transfers: nb.transfers.filter((_,i) => i!==idx) });
+  const item = nb.transfers[idx];
+  if (item) moveToTrash({ kind:'nehaTransfer', item });
+  saveNehaBank({ ...nb, transfers: nb.transfers.filter((_,i) => i!==idx) }, 'deleted a Neha transfer');
 }
 // Sum of every ledger item, any month, paid via Neha Bank — mirrors ccChargesFor's
 // cross-month scan but reuses collectPaidItems (already normalizes both item shapes).
@@ -830,36 +919,39 @@ function nehaBankBalance() {
 // Keys match monthCategoryTotals() so an over-budget check is a direct compare.
 const BUDGET_CATS = [['maids','Maids'],['aavia','Aavia'],['fixed','Fixed'],['household','Household'],['neha','Neha'],['avishek','Avishek']];
 function getBudgets() { return appState.budgets || {}; }
-function saveBudgets(next) {
+function saveBudgets(next, logMsg) {
   pushUndo('Budget change');
   appState = { ...appState, budgets: next };
   saveLocal(); render(); renderMenu(); if (IN_GAS) scheduleSync();
+  logActivity(logMsg || 'updated a budget');
 }
 function setBudget(cat, val) {
   const amt = Math.round(Number(val)||0);
   const cur = { ...getBudgets() };
   if (amt > 0) cur[cat] = amt; else delete cur[cat]; // 0 / blank clears the cap
-  saveBudgets(cur);
+  saveBudgets(cur, amt > 0 ? `set ${cat} budget to ₹${amt}` : `cleared ${cat} budget`);
 }
 
 function getMD()        { return getMDFor(currentMonth); }
 function getMDFor(mk)   { return { ...emptyMonth(), ...(appState.months[mk] || {}) }; }
 
-function updateMonth(patch) {
+function updateMonth(patch, logMsg) {
   pushUndo('Ledger change · ' + monthLabel(currentMonth));
   const next = { ...getMD(), ...patch };
   appState = { ...appState, months: { ...appState.months, [currentMonth]: next } };
   saveLocal();
   render();
   if (IN_GAS) scheduleSync();
+  logActivity(logMsg || ('edited ' + monthLabel(currentMonth) + ' ledger'));
 }
-function updateMonthFor(mk, patch) {
+function updateMonthFor(mk, patch, logMsg) {
   pushUndo('Ledger change · ' + monthLabel(mk));
   const next = { ...getMDFor(mk), ...patch };
   appState = { ...appState, months: { ...appState.months, [mk]: next } };
   saveLocal();
   render();
   if (IN_GAS) scheduleSync();
+  logActivity(logMsg || ('edited ' + monthLabel(mk) + ' ledger'));
 }
 
 // ── Storage ────────────────────────────────────────────────────────────────
@@ -1072,7 +1164,7 @@ function addGrocery() {
   const tmd = getMDFor(mk);
   const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date, paid:false };
   gDraft.amount=''; gDraft.date='';
-  updateMonthFor(mk, { groceries:[...(tmd.groceries||[]),entry] });
+  updateMonthFor(mk, { groceries:[...(tmd.groceries||[]),entry] }, `added ₹${amt} groceries (${entry.vendor})`);
 }
 function editGroceryDate(i, val) {
   if (!val) return;
@@ -1087,7 +1179,9 @@ function toggleGroceryPaid(i) {
 function deleteGrocery(i) {
   captureGroceryDraft();
   const md = getMD();
-  updateMonth({ groceries:(md.groceries||[]).filter((_,idx)=>idx!==i) });
+  const item = (md.groceries||[])[i];
+  if (item) moveToTrash({ kind:'month', mk: currentMonth, cat:'groceries', item });
+  updateMonth({ groceries:(md.groceries||[]).filter((_,idx)=>idx!==i) }, 'deleted a grocery item');
 }
 
 // ── Misc items ─────────────────────────────────────────────────────────────
@@ -1107,7 +1201,7 @@ function addMiscItem(cat) {
   const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
   const tmd = getMDFor(mk);
   miscDrafts[cat] = { text:'', amount:'', date:'' };
-  updateMonthFor(mk, { [cat]:[...(tmd[cat]||[]),{ text, amount:amt, paid:false, date }] });
+  updateMonthFor(mk, { [cat]:[...(tmd[cat]||[]),{ text, amount:amt, paid:false, date }] }, `added ₹${amt} ${cat} (${text})`);
 }
 function editMiscDate(cat, i, val) {
   if (!val) return;
@@ -1125,6 +1219,7 @@ function moveDatedItem(cat, i, val) {
     return;
   }
   const tmd = getMDFor(toMk);
+  pushUndo('Move item to ' + monthLabel(toMk));
   appState = { ...appState, months: { ...appState.months,
     [fromMk]: { ...fmd, [cat]: (fmd[cat]||[]).filter((_,idx)=>idx!==i) },
     [toMk]:   { ...tmd, [cat]: [...(tmd[cat]||[]), { ...item, date: val }] } } };
@@ -1139,7 +1234,9 @@ function toggleMiscPaid(cat,i) {
 function deleteMiscItem(cat,i) {
   captureMiscDraft(cat);
   const md = getMD();
-  updateMonth({ [cat]:(md[cat]||[]).filter((_,idx)=>idx!==i) });
+  const item = (md[cat]||[])[i];
+  if (item) moveToTrash({ kind:'month', mk: currentMonth, cat, item });
+  updateMonth({ [cat]:(md[cat]||[]).filter((_,idx)=>idx!==i) }, `deleted a ${cat} item`);
 }
 
 function today() { return new Date().toISOString().slice(0,10); }
@@ -1224,6 +1321,22 @@ let pushDirty = false;   // a save happened while a push was in flight
 let pushBusy  = false;
 
 function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500); }
+
+// Fire-and-forget activity log entry — appended as a row in a separate Sheet
+// tab (not the synced appState blob), so it never affects the main sync payload
+// and a failure here must never block or roll back the actual data save.
+// The server stamps the verified email itself (from the id token), so we only
+// send the action description here — never a client-claimed identity.
+function logActivity(action) {
+  if (!IN_GAS || !auth || !auth.idToken || !action) return;
+  try {
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ idToken: auth.idToken, op: 'log', entry: action }),
+    }).catch(() => {});
+  } catch (e) {}
+}
 
 // ID tokens expire after ~1h. On an auth error, silently re-login once and
 // retry; if that fails too, surface the sign-in screen.
@@ -1723,7 +1836,9 @@ function saveCycleEdit() {
 function deleteCycleTransaction(mk, cat, i) {
   if (!confirm('Delete this transaction from the Ledger?')) return;
   const tmd = getMDFor(mk);
-  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).filter((_,idx) => idx!==i) });
+  const item = (tmd[cat]||[])[i];
+  if (item) moveToTrash({ kind:'month', mk, cat, item });
+  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).filter((_,idx) => idx!==i) }, 'deleted a CC cycle transaction');
   // Re-render cycle review
   if (pendingCycleReview) {
     const html = ccCycleTransactionsHtml(pendingCycleReview.cardKey, pendingCycleReview.cycleKey, pendingCycleReview.label, pendingCycleReview.total);
@@ -1860,20 +1975,24 @@ function ccBuildCycles(cardKey) {
   return { cycles: out, outstanding: totalCharged - totalPaid };
 }
 
-function saveCcPayments(next) {
+function saveCcPayments(next, logMsg) {
   pushUndo('Credit card payment change');
   appState = { ...appState, ccPayments: next };
   saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
+  logActivity(logMsg || 'updated a CC payment');
 }
 function addCcPayment(cardKey, cycleKey, amount, date) {
   const amt = Math.round(Number(amount));
   if (!(amt > 0)) return;
   const cur = getCcPayments();
-  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { amount:amt, date: date||today(), cycleKey }] });
+  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { amount:amt, date: date||today(), cycleKey }] },
+    `paid ₹${amt} on ${CC_CYCLES[cardKey]?.label || cardKey}`);
 }
 function deleteCcPayment(cardKey, idx) {
   const cur = getCcPayments();
-  saveCcPayments({ ...cur, [cardKey]: cur[cardKey].filter((_,i) => i!==idx) });
+  const item = cur[cardKey][idx];
+  if (item) moveToTrash({ kind:'ccPayment', cardKey, item });
+  saveCcPayments({ ...cur, [cardKey]: cur[cardKey].filter((_,i) => i!==idx) }, 'deleted a CC payment');
 }
 
 // ── Monthly category totals ────────────────────────────────────────────────
@@ -2097,16 +2216,42 @@ function renderMenu() {
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('cc')">← Back</button>` + statementUploadHtml();
     return;
   }
+  if (menuView === 'trash') {
+    if (titleEl) titleEl.textContent = 'Recently Deleted';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + trashSectionHtml();
+    return;
+  }
+  if (menuView === 'activity') {
+    if (titleEl) titleEl.textContent = 'Activity';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + activitySectionHtml();
+    return;
+  }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
     <a class="menu-link" onclick="setMenuView('trends')">Trends <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('budgets')">Budgets <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
+    <a class="menu-link" onclick="openTrashView()">Recently Deleted <span>›</span></a>
+    <a class="menu-link" onclick="openActivityView()">Activity <span>›</span></a>
     <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
     <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
+}
+function trashSectionHtml() {
+  const trash = getTrash();
+  if (!trash.length) {
+    return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Recently Deleted</span></div>
+      <div class="cc-empty" style="padding-top:0">Nothing here — deleted items are kept for 7 days.</div></section>`;
+  }
+  const rows = trash.slice().reverse().map(t => {
+    const label = t.item.text || t.item.vendor
+      || (t.kind==='nehaTransfer' ? (t.item.direction==='in'?'Avishek → Neha':'Neha → Avishek') : 'CC payment');
+    return `<div class="cc-pay"><span>₹${inr(t.item.amount)} · ${esc(label)} · deleted ${fmtDMY(new Date(t.deletedAt))}</span><button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="restoreFromTrash('${t.id}')">Restore</button></div>`;
+  }).join('');
+  return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Recently Deleted</span></div>
+    <div class="cc-empty" style="padding-top:0;font-size:13px">Kept for 7 days, then removed automatically.</div>${rows}</section>`;
 }
 function notificationsLabel() { return (uiPrefs.notificationsEnabled ?? true) ? 'On' : 'Off'; }
 function cycleNotifications() {
@@ -3155,6 +3300,42 @@ function showApkGate(apkUrl, installedVer, needVer) {
   g.classList.remove('hidden');
 }
 
+// ── Biometric / device-credential lock ──────────────────────────────────────
+// Gates the app on cold start and on every resume from background.
+// allowDeviceCredential lets the phone's own PIN/pattern/password serve as the
+// fallback when no biometric is enrolled — no separate in-app PIN to build/store.
+function unlockGate() {
+  const g = document.getElementById('lock-gate');
+  if (g) g.classList.add('hidden');
+}
+async function requireLock() {
+  const Bio = getNativePlugin('BiometricAuth');
+  if (!Bio) return; // browser/preview or older shell without the plugin — no-op
+  let check;
+  try { check = await Bio.checkBiometry(); } catch (e) { return; } // can't check → don't lock the user out
+  if (!check || (!check.isAvailable && !check.deviceIsSecure)) return; // nothing to authenticate against
+  const g = document.getElementById('lock-gate');
+  const btn = document.getElementById('lock-gate-btn');
+  const attempt = async () => {
+    try {
+      await Bio.authenticate({
+        reason: 'Unlock Household Ledger',
+        cancelTitle: 'Cancel',
+        allowDeviceCredential: true,
+        androidTitle: 'Unlock Household Ledger',
+        androidSubtitle: 'Use your fingerprint, face, or device PIN',
+      });
+      unlockGate();
+    } catch (e) {
+      // authentication failed/cancelled — gate stays up, user retries via the button
+    }
+  };
+  if (btn) btn.onclick = attempt;
+  hideLaunch();
+  if (g) g.classList.remove('hidden');
+  await attempt();
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 // ── Local Notifications (Bill due-date reminders) ─────────────────────────
 async function scheduleNotifications() {
@@ -3190,6 +3371,7 @@ async function boot() {
   loadUI();
   applyTheme();
   loadAuth();
+  pruneTrash();
   render();
   bindSwipe();
   scheduleNotifications();
@@ -3201,6 +3383,9 @@ async function boot() {
   if (Updater) { try { await Updater.notifyAppReady(); } catch (e) {} }
   const Splash = getNativePlugin('SplashScreen');
   if (Splash) { try { await Splash.hide(); } catch (e) {} }
+
+  // Biometric/device-credential lock — blocks until unlocked (no-op outside native shell).
+  await requireLock();
 
   // Fetch the update feed once; use it for both the native gate and the web update.
   launchStatus('Checking for updates…', 55);
@@ -3234,6 +3419,12 @@ document.addEventListener('visibilitychange', () => {
     scheduleNotifications();
   }
 });
+
+// Re-lock every time the native app resumes from the background.
+(() => {
+  const App = getNativePlugin('App');
+  if (App && App.addListener) App.addListener('resume', () => { requireLock(); });
+})();
 </script>
 </body>
 </html>
