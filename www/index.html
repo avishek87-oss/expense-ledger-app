@@ -278,7 +278,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .cc-out{font-family:var(--mono);font-size:18px;font-weight:600;white-space:nowrap}
 .cc-out.due{color:var(--maroon)} .cc-out.ok{color:var(--green)}
 .cc-out small{font-family:var(--sans);font-size:10px;font-weight:400;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.cc-cyc{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.cc-cyc{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}
 .cc-cyc-win{font-family:var(--sans);font-size:14px;color:var(--ink)}
 .cc-cyc-sub{font-family:var(--sans);font-size:12px;margin-top:2px;color:var(--muted)}
 .cc-cyc-sub.over{color:var(--maroon)} .cc-cyc-sub.due{color:#a9782f} .cc-cyc-sub.ok{color:var(--green)} .cc-cyc-sub.cur{color:var(--muted)}
@@ -287,9 +287,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .cc-pays{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 .cc-pay{display:flex;align-items:center;justify-content:space-between;font-family:var(--sans);font-size:12.5px;color:var(--green);padding:2px 0}
 .cc-del{background:none;border:none;color:var(--faint);font-size:14px;cursor:pointer;min-height:32px;min-width:32px;-webkit-tap-highlight-color:transparent}
-.cc-form{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .cc-date{border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);min-height:44px}
-.cc-form .misc-amt{width:auto;flex:1;min-width:90px}
 .ms-month{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow)}
 .ms-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
 .ms-head span:first-child{font-family:var(--serif);font-size:16px;font-weight:600}
@@ -313,6 +311,9 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pmth-btn{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:15px 12px;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
 .pmth-btn:hover{border-color:var(--ink);background:#fff}
 .pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
+.cc-pay-fields{display:flex;gap:8px;margin-bottom:12px}
+.cc-pay-fields .misc-amt{width:auto;flex:1;min-width:90px}
+.cc-pay-confirm{width:100%;min-height:50px;font-size:15px}
 /* Method chip */
 .paid-grp{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .pay-chip{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap}
@@ -422,6 +423,18 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   </div>
 </div>
 
+<div id="cc-pay-overlay" class="pay-overlay hidden" onclick="cancelCcPay()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title" id="cc-pay-title">Pay cycle</div>
+    <div class="cc-pay-fields">
+      <input id="cc-pay-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="pay amount">
+      <input id="cc-pay-date" class="cc-date" type="date">
+    </div>
+    <button class="add-btn cc-pay-confirm" onclick="confirmCcPay()">Pay</button>
+    <button class="pay-cancel" onclick="cancelCcPay()">Cancel</button>
+  </div>
+</div>
+
 
 <script>
 // Crash catcher: paints any JS error on screen so failures are never silent.
@@ -493,7 +506,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -516,6 +529,7 @@ let uiPrefs = { collapsed: {} };
 let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
 let miscDrafts = {};
 let pendingPay = null;
+let pendingCcPay = null; // { cardKey, cycleKey } while the CC pay sheet is open
 let menuView = 'home'; // hamburger drawer: 'home' | 'cc'
 let heroSpendsOpen = false;
 
@@ -1129,6 +1143,29 @@ function cancelPay() {
   document.getElementById('pay-overlay').classList.add('hidden');
 }
 
+// Opens the bottom sheet for paying a specific CC billing cycle.
+function openCcPaySheet(cardKey, cycleKey, label, remaining) {
+  pendingCcPay = { cardKey, cycleKey };
+  document.getElementById('cc-pay-title').textContent = label + ' · ₹' + inr(Math.max(0,remaining)) + ' due';
+  document.getElementById('cc-pay-amt').value = Math.max(0, Math.round(remaining));
+  document.getElementById('cc-pay-date').value = today();
+  document.getElementById('cc-pay-overlay').classList.remove('hidden');
+}
+function confirmCcPay() {
+  if (!pendingCcPay) return;
+  const { cardKey, cycleKey } = pendingCcPay;
+  const amt  = Number((document.getElementById('cc-pay-amt')||{}).value);
+  const date = (document.getElementById('cc-pay-date')||{}).value || today();
+  if (!(amt > 0)) return;
+  pendingCcPay = null;
+  document.getElementById('cc-pay-overlay').classList.add('hidden');
+  addCcPayment(cardKey, cycleKey, amt, date);
+}
+function cancelCcPay() {
+  pendingCcPay = null;
+  document.getElementById('cc-pay-overlay').classList.add('hidden');
+}
+
 // ── Credit-card cycles ─────────────────────────────────────────────────────
 function isoOf(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; }
 function fmtDM(dt){ return dt.getDate() + ' ' + dt.toLocaleDateString('en-IN',{month:'short'}); }
@@ -1181,7 +1218,9 @@ function ccChargesFor(cardKey) {
   return charges;
 }
 
-// Group charges into billing cycles and allocate bill payments oldest-first.
+// Group charges into billing cycles and allocate bill payments.
+// Payments tagged with a cycleKey settle that cycle directly; untagged (legacy)
+// payments fall back to draining the remaining balance oldest-cycle-first.
 function ccBuildCycles(cardKey) {
   const charges = ccChargesFor(cardKey);
   const map = {};
@@ -1193,18 +1232,25 @@ function ccBuildCycles(cardKey) {
   const totalCharged = charges.reduce((s,c) => s+c.amount, 0);
   const pays = getCcPayments()[cardKey];
   const totalPaid = pays.reduce((s,p) => s+Number(p.amount||0), 0);
-  let pool = totalPaid;
+  const directPaid = {};
+  let pool = 0;
+  pays.forEach(p => {
+    if (p.cycleKey) directPaid[p.cycleKey] = (directPaid[p.cycleKey]||0) + Number(p.amount||0);
+    else pool += Number(p.amount||0);
+  });
   const now = new Date(); now.setHours(0,0,0,0);
   const out = asc.map(({cyc,total}) => {
-    const paidTo = Math.min(pool, total); pool -= paidTo;
-    const remaining = total - paidTo;
-    const left = paidTo > 0 ? ` · ₹${inr(remaining)} left` : '';
+    const afterDirect = total - (directPaid[cyc.key]||0);
+    const poolPaidTo = Math.min(pool, Math.max(0, afterDirect)); pool -= poolPaidTo;
+    const remaining = afterDirect - poolPaidTo;
+    const paidSoFar = total - remaining;
+    const left = paidSoFar > 0 ? ` · ₹${inr(remaining)} left` : '';
     let statusClass, statusLabel;
     if (cyc.end >= now)        { statusClass='cur';  statusLabel='Current · closes ' + fmtDate(isoOf(cyc.end)); }
     else if (remaining <= 0)   { statusClass='ok';   statusLabel='Paid'; }
     else if (now > cyc.due)    { statusClass='over'; statusLabel='Overdue · was due ' + fmtDate(isoOf(cyc.due)) + left; }
     else                       { statusClass='due';  statusLabel='Due ' + fmtDate(isoOf(cyc.due)) + left; }
-    return { label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, statusClass, statusLabel };
+    return { key: cyc.key, label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, remaining, statusClass, statusLabel };
   });
   out.reverse(); // most recent first
   return { cycles: out, outstanding: totalCharged - totalPaid };
@@ -1214,12 +1260,11 @@ function saveCcPayments(next) {
   appState = { ...appState, ccPayments: next };
   saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
 }
-function addCcPayment(cardKey) {
-  const amt  = Math.round(Number((document.getElementById('cc-amt-'+cardKey)||{}).value));
-  const date = (document.getElementById('cc-date-'+cardKey)||{}).value || today();
+function addCcPayment(cardKey, cycleKey, amount, date) {
+  const amt = Math.round(Number(amount));
   if (!(amt > 0)) return;
   const cur = getCcPayments();
-  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { amount:amt, date }] });
+  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { amount:amt, date: date||today(), cycleKey }] });
 }
 function deleteCcPayment(cardKey, idx) {
   const cur = getCcPayments();
@@ -1305,20 +1350,20 @@ function ccSectionHtml() {
     // Hide fully-paid cycles — once a month's bill is settled it drops off the list.
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');
     html += visible.length
-      ? visible.map(c => `<div class="cc-cyc">
+      ? visible.map(c => `<div class="cc-cyc" onclick="openCcPaySheet('${cardKey}','${c.key}','${esc(c.label)}',${c.remaining})">
           <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
           <div class="cc-cyc-amt">₹${inr(c.total)}</div>
         </div>`).join('')
       : (b.cycles.length ? `<div class="cc-empty">All cycles paid up ✓</div>`
                          : `<div class="cc-empty">No spends on this card yet</div>`);
+    const cycleLabelByKey = {};
+    b.cycles.forEach(c => { cycleLabelByKey[c.key] = c.label; });
     const pays = getCcPayments()[cardKey];
-    if (pays.length) html += `<div class="cc-pays">` + pays.map((p,i) =>
-      `<div class="cc-pay"><span>Paid ₹${inr(p.amount)} · ${fmtDMY(new Date(p.date))}</span><button class="cc-del" onclick="deleteCcPayment('${cardKey}',${i})" aria-label="delete">✕</button></div>`).join('') + `</div>`;
-    html += `<div class="cc-form">
-      <input id="cc-amt-${cardKey}" class="misc-amt" type="number" inputmode="numeric" placeholder="pay amount">
-      <input id="cc-date-${cardKey}" class="cc-date" type="date" value="${today()}">
-      <button class="add-btn" onclick="addCcPayment('${cardKey}')">Pay</button>
-    </div></section>`;
+    if (pays.length) html += `<div class="cc-pays">` + pays.map((p,i) => {
+      const tag = p.cycleKey && cycleLabelByKey[p.cycleKey] ? ` (${cycleLabelByKey[p.cycleKey]})` : '';
+      return `<div class="cc-pay"><span>Paid ₹${inr(p.amount)} · ${fmtDMY(new Date(p.date))}${tag}</span><button class="cc-del" onclick="deleteCcPayment('${cardKey}',${i})" aria-label="delete">✕</button></div>`;
+    }).join('') + `</div>`;
+    html += `</section>`;
   });
   return html;
 }
