@@ -702,7 +702,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.10';
+const APP_VERSION = '2.5.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -3129,6 +3129,13 @@ async function scheduleNotifications() {
   if (!uiPrefs.notificationsEnabled) return;
   const LocalNotif = getNativePlugin('LocalNotifications');
   if (!LocalNotif) return;
+  try {
+    const perm = await LocalNotif.checkPermissions();
+    if (perm.display !== 'granted') {
+      const req = await LocalNotif.requestPermissions();
+      if (req.display !== 'granted') return;
+    }
+  } catch (e) { return; }
   const today = new Date();
   const mo = today.getMonth() + 1, da = today.getDate();
   const upcoming = [];
