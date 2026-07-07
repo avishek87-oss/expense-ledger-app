@@ -699,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.3';
+const APP_VERSION = '2.4.4';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1603,33 +1603,18 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   const cycleTotal = txns.reduce((s, t) => s + t.amount, 0);
   let html = `<div class="cc-cyc-review-header"><span class="cc-cyc-review-title">${esc(label)}</span><span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span></div>`;
   if (txns.length) {
-    const byMonth = {};
+    html += `<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">`;
     txns.forEach(t => {
-      if (!byMonth[t.mk]) byMonth[t.mk] = [];
-      byMonth[t.mk].push(t);
+      const rowBg = t.editable ? '' : 'background:rgba(0,0,0,0.1)';
+      html += `<div class="cc-cyc-txn-row" style="display:flex;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line);font-size:13px;${rowBg}">
+        <span style="flex:0 0 55px;color:var(--muted);font-size:12px">${fmtDMY(new Date(t.date))}</span>
+        <span style="flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:${t.editable?'1':'0.6'}">${esc(t.desc.substring(0,40))}${t.editable?'':'  (fixed)'}</span>
+        <span style="flex:0 0 70px;text-align:right;font-family:var(--mono);font-weight:500;color:var(--ink)">₹${inr(t.amount)}</span>
+        ${t.editable ? `<button class="cc-cyc-edit-btn" onclick="openCycleEditForm('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">✎</button>
+        <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">×</button>` : '<span style="flex:0 0 64px"></span>'}
+      </div>`;
     });
-    Object.keys(byMonth).sort().forEach(mk => {
-      const monthTxns = byMonth[mk];
-      const monthTotal = monthTxns.reduce((s, t) => s + t.amount, 0);
-      const monthLabel = monthShort(mk);
-      html += `<div class="cc-cyc-month-sec" style="margin:12px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-        <div class="cc-cyc-month-hd" style="background:var(--card);padding:10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-weight:600;font-size:13px">
-          <span>${monthLabel}</span>
-          <span class="cc-cyc-month-total">₹${inr(monthTotal)}</span>
-        </div>
-        <div>`;
-      monthTxns.forEach(t => {
-        const rowBg = t.editable ? '' : 'background:rgba(0,0,0,0.1)';
-        html += `<div class="cc-cyc-txn-row" style="display:flex;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line);font-size:13px;${rowBg}">
-          <span style="flex:0 0 55px;color:var(--muted);font-size:12px">${fmtDMY(new Date(t.date))}</span>
-          <span style="flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:${t.editable?'1':'0.6'}">${esc(t.desc.substring(0,40))}${t.editable?'':'  (fixed)'}</span>
-          <span style="flex:0 0 70px;text-align:right;font-family:var(--mono);font-weight:500;color:var(--ink)">₹${inr(t.amount)}</span>
-          ${t.editable ? `<button class="cc-cyc-edit-btn" onclick="openCycleEditForm('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">✎</button>
-          <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" style="background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:0;min-width:32px;-webkit-tap-highlight-color:transparent">×</button>` : '<span style="flex:0 0 64px"></span>'}
-        </div>`;
-      });
-      html += `</div></div>`;
-    });
+    html += `</div>`;
   } else {
     html += `<div class="cc-empty">No transactions in this cycle</div>`;
   }
