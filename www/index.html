@@ -718,7 +718,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.7.2';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -3397,11 +3397,13 @@ async function boot() {
     if (nv && cmpVer(nv, info.minApk) < 0) { showApkGate(info.apkUrl || '', nv, info.minApk); return; }
   }
 
+  // Seamless web bundle update (may reload the app) — run this BEFORE the
+  // sign-in gate, so a signed-out/stuck-at-login device still always picks up
+  // the latest bundle instead of the update silently being skipped.
+  await applyWebUpdate(info);
+
   // Not signed in → login screen.
   if (IN_GAS && !(auth && auth.idToken)) { hideLaunch(); showLogin(true); return; }
-
-  // Seamless web bundle update (may reload the app).
-  await applyWebUpdate(info);
 
   // Pull shared data from the sheet.
   if (IN_GAS) { launchStatus('Syncing…', 80); await pullFromSheets(); }
