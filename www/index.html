@@ -2235,6 +2235,7 @@ function renderMenu() {
     <a class="menu-link" onclick="openTrashView()">Recently Deleted <span>›</span></a>
     <a class="menu-link" onclick="openActivityView()">Activity <span>›</span></a>
     <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
+    <a class="menu-link" onclick="cycleLockEnabled()">Screen Lock <span>${lockLabel()}</span></a>
     <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
@@ -2258,6 +2259,12 @@ function cycleNotifications() {
   uiPrefs.notificationsEnabled = !uiPrefs.notificationsEnabled;
   saveUI();
   if (uiPrefs.notificationsEnabled) scheduleNotifications();
+  renderMenu();
+}
+function lockLabel() { return (uiPrefs.lockEnabled ?? true) ? 'On' : 'Off'; }
+function cycleLockEnabled() {
+  uiPrefs.lockEnabled = !(uiPrefs.lockEnabled ?? true);
+  saveUI();
   renderMenu();
 }
 function ccSectionHtml() {
@@ -3309,6 +3316,7 @@ function unlockGate() {
   if (g) g.classList.add('hidden');
 }
 async function requireLock() {
+  if (!(uiPrefs.lockEnabled ?? true)) return; // user turned it off in the hamburger menu
   const Bio = getNativePlugin('BiometricAuth');
   if (!Bio) return; // browser/preview or older shell without the plugin — no-op
   let check;
