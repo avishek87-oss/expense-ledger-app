@@ -363,6 +363,30 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pmth-btn{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:15px 12px;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
 .pmth-btn:hover{border-color:var(--ink);background:var(--input-bg)}
 .pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
+/* Header search button */
+#search-btn{background:none;border:none;font-size:16px;line-height:1;cursor:pointer;padding:4px 6px;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent;flex-shrink:0;filter:grayscale(1);opacity:.75}
+/* Quick-add FAB */
+#fab{position:fixed;right:20px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:150;width:56px;height:56px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:30px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.28);-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center}
+#fab.hidden{display:none}
+/* Search overlay */
+.search-overlay{position:fixed;inset:0;z-index:340;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+.search-overlay.hidden{display:none}
+.search-bar{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--card)}
+#search-inp{flex:1;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-family:var(--sans);font-size:16px;background:var(--input-bg);color:var(--ink);min-height:46px}
+.search-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;min-height:44px;min-width:44px;-webkit-tap-highlight-color:transparent}
+#search-results{flex:1;overflow-y:auto;padding:8px 16px 40px}
+.sr-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sr-name{font-family:var(--sans);font-size:15px;color:var(--ink);font-weight:600}
+.sr-sub{font-family:var(--sans);font-size:12px;color:var(--muted);margin-top:2px}
+.sr-amt{font-family:var(--mono);font-size:14px;flex-shrink:0}
+.sr-amt.due{color:var(--maroon)} .sr-amt.paid{color:var(--green)}
+.sr-empty{font-family:var(--sans);font-size:14px;color:var(--faint);text-align:center;padding:40px 0}
+/* Swipe */
+.swipe-wrap{position:relative;overflow:hidden}
+.swipe-row{position:relative;background:var(--card);transition:transform .18s ease;will-change:transform;z-index:1}
+.swipe-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-family:var(--sans);font-size:13px;font-weight:600;color:#fff}
+.swipe-bg .del{margin-left:auto;background:var(--maroon);height:100%;display:flex;align-items:center;padding:0 20px}
+.swipe-bg .pay{background:var(--green);height:100%;display:flex;align-items:center;padding:0 20px}
 #cc-pay-overlay{z-index:360} /* above the hamburger drawer (350) — CC screen lives inside it */
 #neha-xfer-overlay{z-index:360} /* same reason — Neha Bank screen also lives inside the drawer */
 .neha-xfer-btns{display:flex;gap:8px;margin-top:10px}
@@ -435,6 +459,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
     <div id="hdr-top">
       <button id="hmb" onclick="openMenu()" aria-label="Menu">☰</button>
       <h1>Household Ledger<span class="sub">Avishek Family</span></h1>
+      <button id="search-btn" onclick="openSearch()" aria-label="Search" title="Search transactions">🔍</button>
       <button id="undo-btn" class="hidden" onclick="undoLastAction()" aria-label="Undo last action" title="Undo last action">↩<span id="undo-count"></span></button>
       <div id="sync-chip" title="Your data is saved on this device">
         <span id="sync-dot"></span>
@@ -460,6 +485,42 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   <div id="app-body"></div>
   <footer>Household Ledger · <span id="app-ver"></span> · synced to Google Sheet</footer>
 </main>
+
+<!-- Quick-add floating button + sheet -->
+<button id="fab" onclick="openQuickAdd()" aria-label="Quick add expense">+</button>
+<div id="qa-overlay" class="pay-overlay hidden" onclick="closeQuickAdd()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title">Quick add</div>
+    <select id="qa-bucket" class="sel" style="width:100%;margin-bottom:10px" onchange="qaBucketChanged()">
+      <option value="groceries">Groceries</option>
+      <option value="householdGroceries">Household Groceries</option>
+      <option value="householdMisc">Household Misc</option>
+      <option value="nehaMisc">Neha Misc</option>
+      <option value="avishekMisc">Avishek Misc</option>
+      <option value="aaviaMisc">Aavia Misc</option>
+    </select>
+    <div id="qa-grocery-fields" style="display:none;gap:8px;margin-bottom:10px">
+      <select id="qa-vendor" class="sel" style="flex:1"><option>Sagar</option><option>Ajit</option></select>
+      <select id="qa-cat" class="sel" style="flex:1"><option value="veges">veges</option><option value="fruits">fruits</option><option value="other">other</option></select>
+    </div>
+    <input id="qa-text" class="misc-txt" style="width:100%;margin-bottom:10px" type="text" placeholder="what was it?">
+    <div class="cc-pay-fields">
+      <input id="qa-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
+      <input id="qa-date" class="cc-date" type="date">
+    </div>
+    <button class="add-btn cc-pay-confirm" onclick="submitQuickAdd()">Add expense</button>
+    <button class="pay-cancel" onclick="closeQuickAdd()">Cancel</button>
+  </div>
+</div>
+
+<!-- Full-screen search -->
+<div id="search-overlay" class="search-overlay hidden">
+  <div class="search-bar">
+    <input id="search-inp" type="search" placeholder="Search all transactions…" oninput="renderSearch()" autocomplete="off">
+    <button class="search-close" onclick="closeSearch()" aria-label="Close">✕</button>
+  </div>
+  <div id="search-results"></div>
+</div>
 
 <div id="menu-overlay" class="menu-overlay hidden" onclick="closeMenu()">
   <aside id="menu-panel" onclick="event.stopPropagation()">
@@ -586,7 +647,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -875,6 +936,8 @@ function switchTab(tab) {
   document.getElementById('tab-outstanding').classList.toggle('active', tab==='outstanding');
   document.getElementById('tab-payments').classList.toggle('active', tab==='payments');
   document.getElementById('month-nav').classList.toggle('hidden', tab==='outstanding');
+  const fab = document.getElementById('fab');
+  if (fab) fab.classList.toggle('hidden', tab!=='ledger'); // quick-add only on the Ledger tab
   window.scrollTo(0,0);
   render();
 }
@@ -1611,6 +1674,127 @@ function heroSpendsHtml(mk) {
 function openMenu()  { menuView = 'home'; renderMenu(); document.getElementById('menu-overlay').classList.remove('hidden'); }
 function closeMenu() { document.getElementById('menu-overlay').classList.add('hidden'); }
 function setMenuView(v) { menuView = v; renderMenu(); }
+
+// ── Quick-add (floating +) ─────────────────────────────────────────────────
+const QA_GROCERY = 'groceries';
+function openQuickAdd() {
+  document.getElementById('qa-text').value = '';
+  document.getElementById('qa-amt').value = '';
+  document.getElementById('qa-date').value = today();
+  qaBucketChanged();
+  document.getElementById('qa-overlay').classList.remove('hidden');
+}
+function closeQuickAdd() { document.getElementById('qa-overlay').classList.add('hidden'); }
+function qaBucketChanged() {
+  const isGrocery = document.getElementById('qa-bucket').value === QA_GROCERY;
+  document.getElementById('qa-grocery-fields').style.display = isGrocery ? 'flex' : 'none';
+  document.getElementById('qa-text').style.display = isGrocery ? 'none' : 'block';
+}
+function submitQuickAdd() {
+  const bucket = document.getElementById('qa-bucket').value;
+  const amt  = Number(document.getElementById('qa-amt').value);
+  const date = document.getElementById('qa-date').value || today();
+  if (!(amt > 0)) return;
+  const mk = clampMonth(monthKeyOf(date));
+  const tmd = getMDFor(mk);
+  let entry;
+  if (bucket === QA_GROCERY) {
+    entry = { vendor: document.getElementById('qa-vendor').value, category: document.getElementById('qa-cat').value, amount: Math.round(amt), date, paid:false };
+  } else {
+    const text = (document.getElementById('qa-text').value || '').trim();
+    if (!text) return;
+    entry = { text, amount: Math.round(amt), date, paid:false };
+  }
+  updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), entry] });
+  closeQuickAdd();
+}
+
+// ── Search (all transactions, all months) ──────────────────────────────────
+const SEARCH_CATS = { groceries:'Groceries', householdGroceries:'HH Groceries', householdMisc:'HH Misc', aaviaMisc:'Aavia', nehaMisc:'Neha', avishekMisc:'Avishek' };
+function openSearch() {
+  document.getElementById('search-overlay').classList.remove('hidden');
+  const inp = document.getElementById('search-inp');
+  inp.value = ''; renderSearch();
+  setTimeout(() => inp.focus(), 50);
+}
+function closeSearch() { document.getElementById('search-overlay').classList.add('hidden'); }
+function searchIndex() {
+  return Object.keys(appState.months||{}).flatMap(mk => {
+    const md = getMDFor(mk);
+    return Object.keys(SEARCH_CATS).flatMap(cat =>
+      (md[cat]||[]).map((it,i) => ({ mk, cat, i, ...it })));
+  });
+}
+function renderSearch() {
+  const q = (document.getElementById('search-inp').value || '').trim().toLowerCase();
+  const box = document.getElementById('search-results');
+  if (!q) { box.innerHTML = `<div class="sr-empty">Type to search across all months.</div>`; return; }
+  const hits = searchIndex().filter(it => {
+    const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + ' ' + (it.amount||'')).toLowerCase();
+    return hay.includes(q);
+  }).sort((a,b) => (a.mk < b.mk ? 1 : -1)); // newest month first
+  if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches for “${esc(q)}”.</div>`; return; }
+  box.innerHTML = hits.slice(0, 100).map(it => {
+    const name = it.cat === 'groceries' ? `${esc(it.vendor)} · ${esc(it.category)}` : esc(it.text||'');
+    return `<div class="sr-item" onclick="jumpToSearch('${it.mk}')">
+      <div><div class="sr-name">${name}</div><div class="sr-sub">${SEARCH_CATS[it.cat]} · ${monthShort(it.mk)}${it.date?' · '+fmtDate(it.date):''}</div></div>
+      <span class="sr-amt ${it.paid?'paid':'due'}">₹${inr(it.amount)}</span>
+    </div>`;
+  }).join('');
+}
+function jumpToSearch(mk) {
+  currentMonth = mk;
+  closeSearch();
+  switchTab('ledger');
+}
+
+// ── Swipe actions on Ledger rows (delegated on #app-body) ──────────────────
+let swipe = null;
+function swipeStart(e) {
+  const row = e.target.closest('.mitem, .g-item');
+  if (!row || !row.dataset.cat || currentTab !== 'ledger') { swipe = null; return; }
+  // Don't hijack taps that start on an interactive control inside the row.
+  if (e.target.closest('button, input, select, .date-chip')) { swipe = null; return; }
+  const t = e.touches[0];
+  swipe = { row, x0:t.clientX, y0:t.clientY, dx:0, lock:null };
+}
+function swipeMove(e) {
+  if (!swipe) return;
+  const t = e.touches[0];
+  const dx = t.clientX - swipe.x0, dy = t.clientY - swipe.y0;
+  if (swipe.lock === null) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    swipe.lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+  }
+  if (swipe.lock !== 'h') { swipe = null; return; } // vertical → let the page scroll
+  e.preventDefault();
+  swipe.dx = dx;
+  swipe.row.style.transition = 'none';
+  swipe.row.style.transform = `translateX(${dx}px)`;
+  swipe.row.style.background = dx < -70 ? 'rgba(184,67,60,.14)' : dx > 70 ? 'rgba(47,122,92,.14)' : '';
+}
+function swipeEnd() {
+  if (!swipe) return;
+  const { row, dx, lock } = swipe;
+  swipe = null;
+  row.style.transition = 'transform .18s ease';
+  row.style.transform = '';
+  row.style.background = '';
+  if (lock !== 'h') return;
+  const cat = row.dataset.cat, idx = Number(row.dataset.idx);
+  const TH = 90;
+  if (dx < -TH)      { cat === 'groceries' ? deleteGrocery(idx)       : deleteMiscItem(cat, idx); }
+  else if (dx > TH)  { cat === 'groceries' ? startPayment('grocery', idx) : startPayment('misc', cat, idx); }
+}
+function bindSwipe() {
+  const body = document.getElementById('app-body');
+  if (!body || body.dataset.swipeBound) return;
+  body.dataset.swipeBound = '1';
+  body.addEventListener('touchstart', swipeStart, { passive:true });
+  body.addEventListener('touchmove',  swipeMove,  { passive:false });
+  body.addEventListener('touchend',   swipeEnd,   { passive:true });
+  body.addEventListener('touchcancel', swipeEnd,  { passive:true });
+}
 function signOut() { try { localStorage.removeItem(AUTH_KEY); } catch(e){} auth = null; closeMenu(); location.reload(); }
 function renderMenu() {
   const el = document.getElementById('menu-content');
@@ -1966,7 +2150,7 @@ function miscItemList(cat, items) {
   </div>`;
   if ((items||[]).length) {
     html += (items||[]).map((it,i)=>`
-    <div class="mitem">
+    <div class="mitem" data-cat="${cat}" data-idx="${i}">
       <div class="mitem-left">
         <div class="mitem-txt">${esc(it.text)}</div>
         ${dateChip(it.date, `onchange="editMiscDate('${cat}',${i},this.value)"`)}
@@ -2238,7 +2422,7 @@ function render() {
       <button class="add-btn" onclick="addGrocery()">Add</button>
     </div>`;
   groceries.forEach((g,i)=>{
-    hhBody += `<div class="g-item">
+    hhBody += `<div class="g-item" data-cat="groceries" data-idx="${i}">
       <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div>${dateChip(g.date, `onchange="editGroceryDate(${i},this.value)"`)}</div>
       <div class="g-item-right">
         <span class="g-item-amt">₹${inr(g.amount)}</span>
@@ -2549,6 +2733,7 @@ async function boot() {
   applyTheme();
   loadAuth();
   render();
+  bindSwipe();
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
   launchStatus('Loading…', 20);
 
