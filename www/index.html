@@ -310,6 +310,20 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .cc-pays{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 .cc-pay{display:flex;align-items:center;justify-content:space-between;font-family:var(--sans);font-size:12.5px;color:var(--green);padding:2px 0}
 .cc-del{background:none;border:none;color:var(--faint);font-size:14px;cursor:pointer;min-height:32px;min-width:32px;-webkit-tap-highlight-color:transparent}
+.cc-cyc-review-header{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:8px;position:sticky;top:0;background:var(--card);z-index:1}
+.cc-cyc-review-title{font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink)}
+.cc-cyc-review-total{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--accent)}
+.cc-cyc-txn-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:13px}
+.cc-txn-date{flex:0 0 55px;color:var(--muted);font-size:12px}
+.cc-txn-desc{flex:1;color:var(--ink);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-txn-desc:hover{text-decoration:underline}
+.cc-txn-amt{flex:0 0 70px;text-align:right;font-family:var(--mono);font-weight:500;color:var(--ink);cursor:pointer}
+.cc-txn-amt:hover{text-decoration:underline}
+.del-btn{background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:0;min-height:32px;min-width:32px;-webkit-tap-highlight-color:transparent;flex:0 0 32px}
+.cc-cyc-review-actions{display:flex;flex-direction:column;gap:8px;padding-top:12px;margin-top:8px;border-top:1px solid var(--line)}
+.cc-cyc-review-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;z-index:999;overflow-y:auto}
+.cc-cyc-review-overlay.hidden{display:none}
+#cc-cyc-review-content{background:var(--card);border-radius:16px 16px 0 0;width:100%;max-height:85vh;overflow-y:auto;padding:16px;box-shadow:0 -2px 8px rgba(0,0,0,0.1)}
 .cc-date{border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-family:var(--sans);font-size:16px;background:var(--input-bg);color:var(--ink);min-height:44px}
 .ms-month{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow)}
 .ms-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
@@ -578,6 +592,9 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   </div>
 </div>
 
+<div id="cc-cyc-review-overlay" class="cc-cyc-review-overlay hidden" onclick="closeCycleReview()">
+  <div id="cc-cyc-review-content" onclick="event.stopPropagation()"></div>
+</div>
 
 <script>
 // Crash catcher: paints any JS error on screen so failures are never silent.
@@ -649,7 +666,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1498,6 +1515,94 @@ function cancelCcPay() {
   document.getElementById('cc-pay-overlay').classList.add('hidden');
 }
 
+// ── CC Cycle Review (show & edit transactions before payment) ──────────────
+let pendingCycleReview = null;
+function openCcCycleReview(cardKey, cycleKey, label, total) {
+  pendingCycleReview = { cardKey, cycleKey, label, total };
+  const html = ccCycleTransactionsHtml(cardKey, cycleKey, label, total);
+  document.getElementById('cc-cyc-review-content').innerHTML = html;
+  document.getElementById('cc-cyc-review-overlay').classList.remove('hidden');
+}
+function closeCycleReview() {
+  pendingCycleReview = null;
+  document.getElementById('cc-cyc-review-overlay').classList.add('hidden');
+}
+function confirmCycleReview() {
+  if (!pendingCycleReview) return;
+  const { cardKey, cycleKey, label, total } = pendingCycleReview;
+  // Recalculate cycle total in case items were edited
+  const cyc = ccBuildCycles(cardKey).cycles.find(c => c.key === cycleKey);
+  const finalTotal = cyc ? cyc.total : total;
+  closeCycleReview();
+  openCcPaySheet(cardKey, cycleKey, label, finalTotal);
+}
+function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
+  const cycleWindow = ccCycleOf(cardKey, cycleKey);
+  const cycleStart = cycleWindow.start, cycleEnd = cycleWindow.end;
+  const txns = [];
+  Object.keys(appState.months||{}).forEach(mk => {
+    const md = getMDFor(mk);
+    const mkDate = new Date(mk + '-15');
+    if (mkDate < cycleStart || mkDate > cycleEnd) return;
+    // Collect items from all arrays where paid with this card
+    ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'].forEach(cat => {
+      (md[cat]||[]).forEach((it, i) => {
+        if (it.paid && it.payMethod === cardKey) {
+          txns.push({ mk, cat, i, date: it.date, text: it.text||it.vendor||'', amount: Number(it.amount||0), desc: it.text||it.vendor||(cat.includes('Grocery')?'Grocery':'Item') });
+        }
+      });
+    });
+  });
+  const cycleTotal = txns.reduce((s, t) => s + t.amount, 0);
+  let html = `<div class="cc-cyc-review-header">
+    <span class="cc-cyc-review-title">${esc(label)}</span>
+    <span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span>
+  </div>`;
+  if (txns.length) {
+    html += txns.map((t, idx) => `<div class="cc-cyc-txn-row" data-mk="${t.mk}" data-cat="${t.cat}" data-idx="${t.i}">
+      <span class="cc-txn-date">${fmtDMY(new Date(t.date))}</span>
+      <span class="cc-txn-desc" onclick="editCycleTransactionField('${t.mk}','${t.cat}',${t.i},'text')" title="Click to edit">${esc(t.desc.substring(0,30))}</span>
+      <span class="cc-txn-amt" onclick="editCycleTransactionField('${t.mk}','${t.cat}',${t.i},'amount')" title="Click to edit">₹${inr(t.amount)}</span>
+      <button class="del-btn" onclick="deleteCycleTransaction('${t.mk}','${t.cat}',${t.i})" aria-label="delete">×</button>
+    </div>`).join('');
+  } else {
+    html += `<div class="cc-empty">No transactions in this cycle</div>`;
+  }
+  html += `<div class="cc-cyc-review-actions">
+    <button class="add-btn" style="width:100%;margin-top:10px" onclick="confirmCycleReview()">Confirm & Pay</button>
+    <button class="pay-cancel" onclick="closeCycleReview()">Cancel</button>
+  </div>`;
+  return html;
+}
+function editCycleTransactionField(mk, cat, i, field) {
+  const tmd = getMDFor(mk);
+  const it = (tmd[cat]||[])[i];
+  if (!it) return;
+  const oldVal = field === 'amount' ? it.amount : field === 'date' ? it.date : it.text||'';
+  const newVal = prompt(field === 'amount' ? 'New amount (₹):' : field === 'date' ? 'New date (YYYY-MM-DD):' : 'New description:', oldVal);
+  if (newVal === null || newVal === oldVal) return;
+  const patch = { ...it };
+  if (field === 'amount') patch.amount = Math.round(Number(newVal)||0);
+  else if (field === 'date') patch.date = newVal;
+  else patch.text = newVal.trim();
+  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).map((x,idx) => idx===i ? patch : x) });
+  // Re-render the cycle review to show updated total
+  if (pendingCycleReview) {
+    const html = ccCycleTransactionsHtml(pendingCycleReview.cardKey, pendingCycleReview.cycleKey, pendingCycleReview.label, pendingCycleReview.total);
+    document.getElementById('cc-cyc-review-content').innerHTML = html;
+  }
+}
+function deleteCycleTransaction(mk, cat, i) {
+  if (!confirm('Delete this transaction from the Ledger?')) return;
+  const tmd = getMDFor(mk);
+  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).filter((_,idx) => idx!==i) });
+  // Re-render cycle review
+  if (pendingCycleReview) {
+    const html = ccCycleTransactionsHtml(pendingCycleReview.cardKey, pendingCycleReview.cycleKey, pendingCycleReview.label, pendingCycleReview.total);
+    document.getElementById('cc-cyc-review-content').innerHTML = html;
+  }
+}
+
 // Opens the bottom sheet for a Neha Bank <-> Avishek Bank transfer.
 function openNehaXferSheet(direction) {
   pendingNehaXfer = { direction };
@@ -1865,7 +1970,7 @@ function ccSectionHtml() {
     // Hide fully-paid cycles — once a month's bill is settled it drops off the list.
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');
     html += visible.length
-      ? visible.map(c => `<div class="cc-cyc" onclick="openCcPaySheet('${cardKey}','${c.key}','${esc(c.label)}',${c.remaining})">
+      ? visible.map(c => `<div class="cc-cyc" onclick="openCcCycleReview('${cardKey}','${c.key}','${esc(c.label)}',${c.total})">
           <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
           <div class="cc-cyc-amt">₹${inr(c.total)}</div>
         </div>`).join('')
