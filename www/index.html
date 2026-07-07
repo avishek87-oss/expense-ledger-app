@@ -502,7 +502,8 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
       </div>
     </div>
     <div id="tab-bar">
-      <button id="tab-ledger"      class="tab-btn active" onclick="switchTab('ledger')">Ledger</button>
+      <button id="tab-home"        class="tab-btn active" onclick="switchTab('home')">Home</button>
+      <button id="tab-ledger"      class="tab-btn"        onclick="switchTab('ledger')">Ledger</button>
       <button id="tab-outstanding" class="tab-btn"        onclick="switchTab('outstanding')">Outstanding</button>
       <button id="tab-payments"    class="tab-btn"        onclick="switchTab('payments')">Payments</button>
     </div>
@@ -735,7 +736,7 @@ const IN_GAS = GAS_URL.startsWith('https://') && IS_NATIVE;
 // ── State ──────────────────────────────────────────────────────────────────
 let appState = { months: {} };
 let currentMonth = todayMonthKey();
-let currentTab = 'ledger';
+let currentTab = 'home';
 let syncTimer = null;
 let uiPrefs = { collapsed: {} };
 let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
@@ -1081,15 +1082,22 @@ function esc(s) {
 // ── Tab / navigation ───────────────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  document.getElementById('tab-ledger').classList.toggle('active', tab==='ledger');
-  document.getElementById('tab-outstanding').classList.toggle('active', tab==='outstanding');
-  document.getElementById('tab-payments').classList.toggle('active', tab==='payments');
-  document.getElementById('month-nav').classList.toggle('hidden', tab==='outstanding');
-  document.body.classList.toggle('no-month-nav', tab==='outstanding');
-  const fab = document.getElementById('fab');
-  if (fab) fab.classList.toggle('hidden', tab!=='ledger'); // quick-add only on the Ledger tab
   window.scrollTo(0,0);
   render();
+}
+// Tab-chrome DOM toggles (active tab button, month-nav visibility, FAB visibility)
+// live here — inside render() — rather than switchTab(), so they're correct on
+// *every* render including the very first one at boot() (which calls render()
+// directly, never switchTab()), not just on manual tab taps.
+function applyTabChrome() {
+  document.getElementById('tab-home').classList.toggle('active', currentTab==='home');
+  document.getElementById('tab-ledger').classList.toggle('active', currentTab==='ledger');
+  document.getElementById('tab-outstanding').classList.toggle('active', currentTab==='outstanding');
+  document.getElementById('tab-payments').classList.toggle('active', currentTab==='payments');
+  document.getElementById('month-nav').classList.toggle('hidden', currentTab==='outstanding');
+  document.body.classList.toggle('no-month-nav', currentTab==='outstanding');
+  const fab = document.getElementById('fab');
+  if (fab) fab.classList.toggle('hidden', currentTab!=='ledger'); // quick-add only on the Ledger tab
 }
 function shiftMonth(d) {
   const next = addMonths(currentMonth, d);
@@ -2042,8 +2050,11 @@ function heroSpendsHtml(mk) {
 }
 
 // ── Hamburger drawer ───────────────────────────────────────────────────────
-function openMenu()  {
-  menuView = 'home';
+function openMenu()  { openMenuTo('home'); }
+// Opens the hamburger drawer directly to a specific view (used by openMenu()
+// itself, and by Home dashboard tiles drilling into CC/Neha/Budgets).
+function openMenuTo(view) {
+  menuView = view;
   renderMenu();
   document.getElementById('menu-overlay').classList.remove('hidden');
   menuBackHandler = attachOverlayBackHandler('menu-overlay', closeMenu);
@@ -2801,6 +2812,7 @@ function collapsibleCard(id, title, subHtml, amountHtml, bodyHtml, barHtml) {
 // ── Main render ────────────────────────────────────────────────────────────
 function render() {
   const scrollY = window.scrollY;
+  applyTabChrome();
 
   const ml = monthLabel(currentMonth);
   const parts = ml.split(' ');
@@ -2813,6 +2825,12 @@ function render() {
   const todayBtn = document.getElementById('today-jump');
   if (todayBtn) todayBtn.classList.toggle('hidden', currentMonth === todayMonthKey());
 
+  if (currentTab === 'home') {
+    renderHome();
+    window.scrollTo(0, scrollY);
+    setSyncState(IN_GAS ? 'ok' : 'off');
+    return;
+  }
   if (currentTab === 'outstanding') {
     renderOutstanding();
     window.scrollTo(0, scrollY);
@@ -3074,6 +3092,84 @@ function collectPaidItems(mk) {
   pushItems(md.nehaMisc,           it=>'Neha — '+it.text);
   pushItems(md.avishekMisc,        it=>'Avishek — '+it.text);
   return out;
+}
+
+// ── Home dashboard render ───────────────────────────────────────────────────
+// Single at-a-glance screen: month spend, CC dues, Neha balance, budget status.
+// Every number here is read via the same helpers Ledger/Payments/CC/Neha/Budgets
+// already use — no new math, no new state, just a consolidated view.
+function renderHome() {
+  const t = monthCategoryTotals(currentMonth);
+  const paidTot = collectPaidItems(currentMonth).reduce((s,it)=>s+it.amount,0);
+  const pendingTot = t.total - paidTot;
+  const pct = t.total>0 ? Math.round(paidTot/t.total*100) : 0;
+
+  document.getElementById('summary').innerHTML = `
+<div class="hero">
+  <div class="hero-row">
+    <div class="hero-lead">
+      <div class="hero-lbl">Month spend</div>
+      <div class="hero-num">₹${inr(t.total)}</div>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
+      <div class="hstat"><div class="k">Pending</div><div class="v">₹${inr(pendingTot)}</div></div>
+    </div>
+  </div>
+  <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+  <div class="hero-foot"><span><span class="mono">${pct}%</span> settled</span><span>${monthLabel(currentMonth)}</span></div>
+  ${heroSpendsHtml(currentMonth)}
+</div>`;
+
+  document.getElementById('app-body').innerHTML =
+    homeCcCardHtml() + homeNehaCardHtml() + homeBudgetCardHtml();
+}
+function homeCcCardHtml() {
+  const cards = Object.keys(CC_CYCLES).map(cardKey => {
+    const b = ccBuildCycles(cardKey);
+    return { label: CC_CYCLES[cardKey].label, outstanding: Math.max(0, b.outstanding),
+      overdue: b.cycles.some(c => c.statusClass === 'over') };
+  });
+  const totalDue = cards.reduce((s,c)=>s+c.outstanding,0);
+  const rows = cards.map(c => `<div class="cc-cyc" onclick="openMenuTo('cc')">
+    <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.overdue?'over':(c.outstanding>0?'due':'ok')}">${c.overdue?'Overdue':(c.outstanding>0?'Outstanding':'Paid up')}</div></div>
+    <div class="cc-cyc-amt">₹${inr(c.outstanding)}</div>
+  </div>`).join('');
+  return `<section class="cc-card">
+    <div class="cc-head"><span class="cc-name">Credit Cards</span><span class="cc-out ${totalDue>0?'due':'ok'}">₹${inr(totalDue)} <small>owed</small></span></div>
+    ${rows}
+  </section>`;
+}
+function homeNehaCardHtml() {
+  const balance = nehaBankBalance();
+  return `<section class="cc-card">
+    <div class="cc-head"><span class="cc-name">Neha Bank</span><span class="cc-out ${balance>=0?'ok':'due'}">₹${inr(balance)} <small>balance</small></span></div>
+    <div class="cc-cyc" onclick="openMenuTo('neha')"><div class="cc-cyc-l"><div class="cc-cyc-win">View transfers &amp; history</div></div><div class="cc-cyc-amt">›</div></div>
+  </section>`;
+}
+function homeBudgetCardHtml() {
+  const budgets = getBudgets();
+  const t = monthCategoryTotals(currentMonth);
+  const capped = BUDGET_CATS.filter(([cat]) => budgets[cat] > 0);
+  if (!capped.length) {
+    return `<section class="cc-card">
+      <div class="cc-head"><span class="cc-name">Budgets</span></div>
+      <div class="cc-empty" style="padding-top:0">No budgets set yet.</div>
+      <div class="cc-cyc" onclick="openMenuTo('budgets')"><div class="cc-cyc-l"><div class="cc-cyc-win">Set up budgets</div></div><div class="cc-cyc-amt">›</div></div>
+    </section>`;
+  }
+  const overCats = capped.filter(([cat]) => (t[cat]||0) > budgets[cat]);
+  const rows = capped.map(([cat,label]) => {
+    const cap = budgets[cat], spent = t[cat]||0, over = spent > cap;
+    return `<div class="cc-cyc" onclick="openMenuTo('budgets')">
+      <div class="cc-cyc-l"><div class="cc-cyc-win">${label}</div><div class="cc-cyc-sub ${over?'over':'ok'}">₹${inr(spent)} of ₹${inr(cap)}</div></div>
+      <div class="cc-cyc-amt">${over?'Over':'OK'}</div>
+    </div>`;
+  }).join('');
+  return `<section class="cc-card">
+    <div class="cc-head"><span class="cc-name">Budgets</span><span class="cc-out ${overCats.length?'due':'ok'}">${overCats.length ? overCats.length+' over' : 'On track'}</span></div>
+    ${rows}
+  </section>`;
 }
 
 // ── Payments render ────────────────────────────────────────────────────────
