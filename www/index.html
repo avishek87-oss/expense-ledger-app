@@ -113,7 +113,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .hero-foot .mono{color:rgba(247,244,236,.82)}
 
 /* ── Toolbar ── */
-.toolbar{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:16px 4px 4px}
+.toolbar{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:16px 4px 4px;position:sticky;top:0;background:var(--bg);z-index:100;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
 .tbtn{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;font-weight:600;transition:color .15s}
 .tbtn:hover{color:var(--ink)}
 
@@ -699,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.7';
+const APP_VERSION = '2.4.8';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
