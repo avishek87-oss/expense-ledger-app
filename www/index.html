@@ -699,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.5';
+const APP_VERSION = '2.4.6';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1550,15 +1550,70 @@ function cancelCcPay() {
 
 // ── CC Cycle Review (show & edit transactions before payment) ──────────────
 let pendingCycleReview = null;
+let cycleReviewSwipe = null;
+let cycleBackHandler = null;
+
+function cycleReviewSwipeStart(e) {
+  if (!e.target.closest('#cc-cyc-review-overlay')) return;
+  const t = e.touches[0];
+  cycleReviewSwipe = { x0: t.clientX, y0: t.clientY, dx: 0, dy: 0 };
+}
+function cycleReviewSwipeMove(e) {
+  if (!cycleReviewSwipe) return;
+  const t = e.touches[0];
+  cycleReviewSwipe.dx = t.clientX - cycleReviewSwipe.x0;
+  cycleReviewSwipe.dy = t.clientY - cycleReviewSwipe.y0;
+}
+function cycleReviewSwipeEnd(e) {
+  if (!cycleReviewSwipe) return;
+  const { dx, dy } = cycleReviewSwipe;
+  cycleReviewSwipe = null;
+  if (dx < -80 || dy > 80) closeCycleReview();
+}
+function setupCycleBackHandler() {
+  if (cycleBackHandler) return;
+  cycleBackHandler = (e) => {
+    if (!pendingCycleReview) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeCycleReview(); }
+  };
+  document.addEventListener('keydown', cycleBackHandler);
+  const App = getNativePlugin('App');
+  if (App) {
+    try {
+      App.addListener('backButton', () => {
+        if (pendingCycleReview) closeCycleReview();
+      });
+    } catch(e){}
+  }
+}
+function clearCycleBackHandler() {
+  if (cycleBackHandler) {
+    document.removeEventListener('keydown', cycleBackHandler);
+    cycleBackHandler = null;
+  }
+}
+
 function openCcCycleReview(cardKey, cycleKey, label, total) {
   pendingCycleReview = { cardKey, cycleKey, label, total };
   const html = ccCycleTransactionsHtml(cardKey, cycleKey, label, total);
   document.getElementById('cc-cyc-review-content').innerHTML = html;
   document.getElementById('cc-cyc-review-overlay').classList.remove('hidden');
+  setupCycleBackHandler();
+  const overlay = document.getElementById('cc-cyc-review-overlay');
+  overlay.addEventListener('touchstart', cycleReviewSwipeStart, { passive: true });
+  overlay.addEventListener('touchmove', cycleReviewSwipeMove, { passive: true });
+  overlay.addEventListener('touchend', cycleReviewSwipeEnd, { passive: true });
+  overlay.addEventListener('touchcancel', cycleReviewSwipeEnd, { passive: true });
 }
 function closeCycleReview() {
   pendingCycleReview = null;
   document.getElementById('cc-cyc-review-overlay').classList.add('hidden');
+  clearCycleBackHandler();
+  const overlay = document.getElementById('cc-cyc-review-overlay');
+  overlay.removeEventListener('touchstart', cycleReviewSwipeStart);
+  overlay.removeEventListener('touchmove', cycleReviewSwipeMove);
+  overlay.removeEventListener('touchend', cycleReviewSwipeEnd);
+  overlay.removeEventListener('touchcancel', cycleReviewSwipeEnd);
 }
 function confirmCycleReview() {
   if (!pendingCycleReview) return;
