@@ -319,6 +319,35 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .ms-rows{display:flex;flex-direction:column;gap:4px}
 .ms-row{display:flex;justify-content:space-between;font-family:var(--sans);font-size:13.5px;color:var(--ink-soft)}
 .ms-row span:last-child{font-family:var(--mono)}
+/* Budgets */
+.budget-row{padding:10px 0;border-top:1px solid var(--line)}
+.budget-top{display:flex;align-items:center;gap:8px}
+.budget-cat{font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink)}
+.budget-meta{font-family:var(--sans);font-size:12px;color:var(--muted);margin:4px 0 6px}
+.budget-meta.over{color:var(--maroon);font-weight:600}
+.budget-note{font-family:var(--sans);font-size:11.5px;color:var(--muted);padding:4px 18px 0}
+.budget-note.over{color:var(--maroon);font-weight:600}
+.budget-note span{color:var(--faint);font-weight:400;margin-left:4px}
+/* Trends */
+.trend-delta{font-family:var(--sans);font-size:13px;font-weight:600;margin:2px 0 12px}
+.trend-delta.up{color:var(--maroon)} .trend-delta.down{color:var(--green)}
+.trend-bars{display:flex;flex-direction:column;gap:8px}
+.trend-bar-row{display:flex;align-items:center;gap:10px}
+.trend-bar-lbl{font-family:var(--sans);font-size:11px;color:var(--muted);width:48px;flex-shrink:0}
+.trend-bar-lbl.cur{color:var(--ink);font-weight:700}
+.trend-bar{flex:1;height:10px;background:var(--line);border-radius:999px;overflow:hidden}
+.trend-bar>i{display:block;height:100%;border-radius:999px;transition:width .4s ease}
+.trend-bar-val{font-family:var(--mono);font-size:12px;color:var(--ink-soft);width:70px;text-align:right;flex-shrink:0}
+/* Donut */
+.donut-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-top:6px}
+.donut-svg{flex-shrink:0}
+.donut-center-top{fill:var(--muted);font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.donut-center-val{fill:var(--ink);font-family:var(--mono);font-size:15px;font-weight:600}
+.donut-legend{flex:1;min-width:150px;display:flex;flex-direction:column;gap:6px}
+.donut-leg{display:flex;align-items:center;gap:8px;font-family:var(--sans);font-size:13px}
+.donut-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.donut-leg-lbl{color:var(--ink)}
+.donut-leg-val{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .login-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
 .login-overlay.hidden{display:none}
 .login-box{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:36px 28px;width:100%;max-width:360px;text-align:center}
@@ -557,7 +586,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -677,6 +706,22 @@ function nehaBankTransferNet() {
 }
 function nehaBankBalance() {
   return getNehaBank().initialBalance + nehaBankTransferNet() - nehaBankSpent();
+}
+
+// ── Budgets (per-category monthly cap; top-level, synced) ──────────────────
+// Keys match monthCategoryTotals() so an over-budget check is a direct compare.
+const BUDGET_CATS = [['maids','Maids'],['aavia','Aavia'],['fixed','Fixed'],['household','Household'],['neha','Neha'],['avishek','Avishek']];
+function getBudgets() { return appState.budgets || {}; }
+function saveBudgets(next) {
+  pushUndo('Budget change');
+  appState = { ...appState, budgets: next };
+  saveLocal(); render(); renderMenu(); if (IN_GAS) scheduleSync();
+}
+function setBudget(cat, val) {
+  const amt = Math.round(Number(val)||0);
+  const cur = { ...getBudgets() };
+  if (amt > 0) cur[cat] = amt; else delete cur[cat]; // 0 / blank clears the cap
+  saveBudgets(cur);
 }
 
 function getMD()        { return getMDFor(currentMonth); }
@@ -1581,8 +1626,20 @@ function renderMenu() {
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + nehaBankSectionHtml();
     return;
   }
+  if (menuView === 'budgets') {
+    if (titleEl) titleEl.textContent = 'Budgets';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + budgetsSectionHtml();
+    return;
+  }
+  if (menuView === 'trends') {
+    if (titleEl) titleEl.textContent = 'Trends';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + trendsSectionHtml();
+    return;
+  }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
+    <a class="menu-link" onclick="setMenuView('trends')">Trends <span>›</span></a>
+    <a class="menu-link" onclick="setMenuView('budgets')">Budgets <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
     <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
@@ -1674,6 +1731,127 @@ function nehaBankSectionHtml() {
   }
   html += `</section>`;
   return html;
+}
+
+// ── Budgets menu view ──────────────────────────────────────────────────────
+let budgetEditCat = null;
+function startBudgetEdit(cat) { budgetEditCat = cat; renderMenu(); }
+function cancelBudgetEdit()   { budgetEditCat = null; renderMenu(); }
+function saveBudgetEdit(cat) {
+  const inp = document.getElementById('budget-inp-'+cat);
+  budgetEditCat = null;
+  if (inp) setBudget(cat, inp.value); else renderMenu();
+}
+function budgetsSectionHtml() {
+  const budgets = getBudgets();
+  const t = monthCategoryTotals(currentMonth);
+  let html = `<section class="cc-card">
+    <div class="cc-head">
+      <span class="cc-name">Monthly caps</span>
+      <span class="cc-out"><small>${monthLabel(currentMonth)}</small></span>
+    </div>
+    <div class="cc-empty" style="padding-top:0">Set a soft cap per category. Spend is this month's total; a cap turns maroon on the Ledger when exceeded. Blank/0 clears it.</div>`;
+  BUDGET_CATS.forEach(([cat,label]) => {
+    const cap = budgets[cat] || 0;
+    const spent = t[cat] || 0;
+    const over = cap > 0 && spent > cap;
+    const pct = cap > 0 ? Math.min(100, Math.round(spent/cap*100)) : 0;
+    html += `<div class="budget-row">
+      <div class="budget-top">
+        <span class="budget-cat">${label}</span>`;
+    if (budgetEditCat === cat) {
+      html += `<span class="base-row" style="margin-left:auto">
+        <span class="base-lbl">Cap ₹</span>
+        <input id="budget-inp-${cat}" class="base-inp" type="number" value="${cap||''}">
+        <button class="base-ok" onclick="saveBudgetEdit('${cat}')">Save</button>
+        <button class="base-cancel" onclick="cancelBudgetEdit()">✕</button>
+      </span>`;
+    } else {
+      html += `<span class="base-row" style="margin-left:auto">
+        <button class="base-edit-btn" onclick="startBudgetEdit('${cat}')" title="Edit cap">✎</button>
+        <span class="base-lbl">${cap>0 ? 'Cap ₹'+inr(cap) : 'No cap'}</span>
+      </span>`;
+    }
+    html += `</div>`;
+    if (cap > 0) {
+      html += `<div class="budget-meta ${over?'over':''}">₹${inr(spent)} spent${over?' · over by ₹'+inr(spent-cap):' of ₹'+inr(cap)}</div>
+        <div class="hd-bar"><i style="width:${pct}%;background:${over?'var(--maroon)':'var(--green-soft)'}"></i></div>`;
+    }
+    html += ``;
+  });
+  html += `</section>`;
+  return html;
+}
+
+// ── Trends menu view ───────────────────────────────────────────────────────
+const DONUT_COLORS = { maids:'var(--accent)', aavia:'var(--green)', fixed:'var(--muted)', household:'var(--maroon)', neha:'var(--accent-soft)', avishek:'var(--due-amber)' };
+function trendsSectionHtml() {
+  const months = menuMonths().slice().reverse(); // ascending for a left→right time axis
+  if (!months.length) return `<section class="cc-card"><div class="cc-empty">No data yet</div></section>`;
+  const totals = months.map(mk => ({ mk, total: monthCategoryTotals(mk).total }));
+  const maxTotal = totals.reduce((mx,x) => Math.max(mx, x.total), 0) || 1;
+
+  // vs last month delta (current vs previous month that has data)
+  const idxCur = months.indexOf(currentMonth);
+  let deltaHtml = '';
+  if (idxCur > 0) {
+    const curT = monthCategoryTotals(currentMonth).total;
+    const prevMk = months[idxCur-1];
+    const prevT = monthCategoryTotals(prevMk).total;
+    const d = curT - prevT;
+    const up = d >= 0;
+    deltaHtml = `<div class="trend-delta ${up?'up':'down'}">${up?'▲':'▼'} ₹${inr(Math.abs(d))} vs ${monthShort(prevMk)}</div>`;
+  }
+
+  // Month-over-month total bars
+  let bars = totals.map(({mk,total}) => {
+    const w = Math.round(total/maxTotal*100);
+    const cur = mk === currentMonth;
+    return `<div class="trend-bar-row">
+      <span class="trend-bar-lbl${cur?' cur':''}">${monthShort(mk)}</span>
+      <div class="trend-bar"><i style="width:${w}%;background:${cur?'var(--accent)':'var(--accent-soft)'}"></i></div>
+      <span class="trend-bar-val">₹${inr(total)}</span>
+    </div>`;
+  }).join('');
+
+  // Category donut for the current month
+  const t = monthCategoryTotals(currentMonth);
+  const donut = donutSvg(t);
+
+  return `<section class="cc-card">
+    <div class="cc-head"><span class="cc-name">Spend over time</span></div>
+    ${deltaHtml}
+    <div class="trend-bars">${bars}</div>
+  </section>
+  <section class="cc-card">
+    <div class="cc-head"><span class="cc-name">Categories</span><span class="cc-out"><small>${monthLabel(currentMonth)}</small></span></div>
+    ${donut}
+  </section>`;
+}
+// Hand-rolled donut: stacked stroke-dasharray arcs on a single circle. No deps.
+function donutSvg(t) {
+  const total = t.total || 0;
+  if (total <= 0) return `<div class="cc-empty">Nothing spent this month</div>`;
+  const R = 54, C = 2 * Math.PI * R;
+  let offset = 0;
+  const segs = BUDGET_CATS.filter(([k]) => t[k] > 0).map(([k,label]) => {
+    const frac = t[k] / total;
+    const len = frac * C;
+    const seg = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${DONUT_COLORS[k]}" stroke-width="20"
+      stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 70 70)"></circle>`;
+    offset += len;
+    return { seg, k, label, frac };
+  });
+  const arcs = segs.map(s => s.seg).join('');
+  const legend = segs.map(s =>
+    `<div class="donut-leg"><span class="donut-dot" style="background:${DONUT_COLORS[s.k]}"></span><span class="donut-leg-lbl">${s.label}</span><span class="donut-leg-val">₹${inr(t[s.k])} · ${Math.round(s.frac*100)}%</span></div>`).join('');
+  return `<div class="donut-wrap">
+    <svg viewBox="0 0 140 140" width="140" height="140" class="donut-svg">${arcs}
+      <text x="70" y="66" text-anchor="middle" class="donut-center-top">Total</text>
+      <text x="70" y="86" text-anchor="middle" class="donut-center-val">₹${inr(total)}</text>
+    </svg>
+    <div class="donut-legend">${legend}</div>
+  </div>`;
 }
 function menuMonths() {
   return Object.keys(appState.months||{}).filter(mk => mk >= MIN_MONTH).sort().reverse();
@@ -1828,8 +2006,18 @@ function sectionCard(id, title, amount, paid, bodyHtml, opts) {
       <span class="hd-amt">₹${inr(amount)}</span>
     </button>
     <div class="hd-bar"><i style="width:${pct}%"></i></div>
+    ${budgetNote(id, amount)}
     <div class="card-body-wrap"><div class="card-body" id="body-${id}">${bodyHtml}</div></div>
   </section>`;
+}
+// Over-budget indicator for a Ledger section, shown only when a cap is set for it.
+function budgetNote(cat, spent) {
+  const cap = getBudgets()[cat] || 0;
+  if (!(cap > 0)) return '';
+  const over = spent > cap;
+  return `<div class="budget-note${over?' over':''}">${over
+    ? `Over budget by ₹${inr(spent-cap)} <span>cap ₹${inr(cap)}</span>`
+    : `₹${inr(spent)} of ₹${inr(cap)} budget`}</div>`;
 }
 // Lightweight collapsible card for the Payments/Outstanding tabs (defaults open).
 function collapsibleCard(id, title, subHtml, amountHtml, bodyHtml, barHtml) {
