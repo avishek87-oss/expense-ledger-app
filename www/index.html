@@ -312,6 +312,9 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pmth-btn:hover{border-color:var(--ink);background:#fff}
 .pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
 #cc-pay-overlay{z-index:360} /* above the hamburger drawer (350) — CC screen lives inside it */
+#neha-xfer-overlay{z-index:360} /* same reason — Neha Bank screen also lives inside the drawer */
+.neha-xfer-btns{display:flex;gap:8px;margin-top:10px}
+.neha-xfer-btns .add-btn{flex:1}
 .cc-pay-fields{display:flex;gap:8px;margin-bottom:12px}
 .cc-pay-fields .misc-amt{width:auto;flex:1;min-width:90px}
 .cc-pay-confirm{width:100%;min-height:50px;font-size:15px}
@@ -436,6 +439,18 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   </div>
 </div>
 
+<div id="neha-xfer-overlay" class="pay-overlay hidden" onclick="cancelNehaXfer()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title" id="neha-xfer-title">Transfer</div>
+    <div class="cc-pay-fields">
+      <input id="neha-xfer-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
+      <input id="neha-xfer-date" class="cc-date" type="date">
+    </div>
+    <button class="add-btn cc-pay-confirm" onclick="confirmNehaXfer()">Transfer</button>
+    <button class="pay-cancel" onclick="cancelNehaXfer()">Cancel</button>
+  </div>
+</div>
+
 
 <script>
 // Crash catcher: paints any JS error on screen so failures are never silent.
@@ -507,7 +522,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.8.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -531,7 +546,9 @@ let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
 let miscDrafts = {};
 let pendingPay = null;
 let pendingCcPay = null; // { cardKey, cycleKey } while the CC pay sheet is open
-let menuView = 'home'; // hamburger drawer: 'home' | 'cc'
+let pendingNehaXfer = null; // { direction } while the Neha transfer sheet is open
+let menuView = 'home'; // hamburger drawer: 'home' | 'cc' | 'neha'
+let nehaEditingBalance = false;
 let heroSpendsOpen = false;
 
 function todayMonthKey() {
@@ -563,6 +580,43 @@ function emptyMonth() {
 function getCcPayments() {
   const c = appState.ccPayments || {};
   return { axisCC: c.axisCC || [], scapiaCC: c.scapiaCC || [] };
+}
+
+// Neha's bank balance (top-level, cross-month). Rides in the synced blob.
+function getNehaBank() {
+  const n = appState.nehaBank || {};
+  return { initialBalance: Number(n.initialBalance||0), transfers: n.transfers || [] };
+}
+function saveNehaBank(next) {
+  appState = { ...appState, nehaBank: next };
+  saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
+}
+function setNehaInitialBalance(val) {
+  saveNehaBank({ ...getNehaBank(), initialBalance: Math.round(Number(val)||0) });
+}
+function addNehaTransfer(direction, amount, date) {
+  const amt = Math.round(Number(amount));
+  if (!(amt > 0)) return;
+  const nb = getNehaBank();
+  saveNehaBank({ ...nb, transfers: [...nb.transfers, { amount:amt, date: date||today(), direction }] });
+}
+function deleteNehaTransfer(idx) {
+  const nb = getNehaBank();
+  saveNehaBank({ ...nb, transfers: nb.transfers.filter((_,i) => i!==idx) });
+}
+// Sum of every ledger item, any month, paid via Neha Bank — mirrors ccChargesFor's
+// cross-month scan but reuses collectPaidItems (already normalizes both item shapes).
+function nehaBankSpent() {
+  return Object.keys(appState.months||{})
+    .flatMap(mk => collectPaidItems(mk))
+    .filter(it => it.method === 'nehaBank')
+    .reduce((s,it) => s+it.amount, 0);
+}
+function nehaBankTransferNet() {
+  return getNehaBank().transfers.reduce((s,t) => s + (t.direction==='in' ? t.amount : -t.amount), 0);
+}
+function nehaBankBalance() {
+  return getNehaBank().initialBalance + nehaBankTransferNet() - nehaBankSpent();
 }
 
 function getMD()        { return getMDFor(currentMonth); }
@@ -1083,6 +1137,30 @@ function baseEditControl(key, currentBase, label) {
   </div>`;
 }
 
+// Opening-balance inline edit for Neha Bank (flat one-off value, not a per-month base).
+function startNehaBalanceEdit()  { nehaEditingBalance = true;  renderMenu(); }
+function cancelNehaBalanceEdit() { nehaEditingBalance = false; renderMenu(); }
+function saveNehaBalance() {
+  const inp = document.getElementById('neha-bal-inp');
+  if (!inp) return;
+  nehaEditingBalance = false;
+  setNehaInitialBalance(inp.value);
+}
+function nehaBalanceEditControl(currentBalance) {
+  if (nehaEditingBalance) {
+    return `<div class="base-row">
+      <span class="base-lbl">Opening ₹</span>
+      <input id="neha-bal-inp" class="base-inp" type="number" value="${currentBalance}">
+      <button class="base-ok" onclick="saveNehaBalance()">Save</button>
+      <button class="base-cancel" onclick="cancelNehaBalanceEdit()">✕</button>
+    </div>`;
+  }
+  return `<div class="base-row">
+    <button class="base-edit-btn" onclick="startNehaBalanceEdit()" title="Edit opening balance">✎</button>
+    <span class="base-lbl">Opening ₹${inr(currentBalance)}</span>
+  </div>`;
+}
+
 // ── Payment picker ─────────────────────────────────────────────────────────
 function pmChip(method) {
   const pm = PAY_METHODS.find(m => m.key === method);
@@ -1165,6 +1243,29 @@ function confirmCcPay() {
 function cancelCcPay() {
   pendingCcPay = null;
   document.getElementById('cc-pay-overlay').classList.add('hidden');
+}
+
+// Opens the bottom sheet for a Neha Bank <-> Avishek Bank transfer.
+function openNehaXferSheet(direction) {
+  pendingNehaXfer = { direction };
+  document.getElementById('neha-xfer-title').textContent = direction === 'in' ? 'Avishek → Neha' : 'Neha → Avishek';
+  document.getElementById('neha-xfer-amt').value = '';
+  document.getElementById('neha-xfer-date').value = today();
+  document.getElementById('neha-xfer-overlay').classList.remove('hidden');
+}
+function confirmNehaXfer() {
+  if (!pendingNehaXfer) return;
+  const { direction } = pendingNehaXfer;
+  const amt  = Number((document.getElementById('neha-xfer-amt')||{}).value);
+  const date = (document.getElementById('neha-xfer-date')||{}).value || today();
+  if (!(amt > 0)) return;
+  pendingNehaXfer = null;
+  document.getElementById('neha-xfer-overlay').classList.add('hidden');
+  addNehaTransfer(direction, amt, date);
+}
+function cancelNehaXfer() {
+  pendingNehaXfer = null;
+  document.getElementById('neha-xfer-overlay').classList.add('hidden');
 }
 
 // ── Credit-card cycles ─────────────────────────────────────────────────────
@@ -1332,9 +1433,15 @@ function renderMenu() {
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + ccSectionHtml();
     return;
   }
+  if (menuView === 'neha') {
+    if (titleEl) titleEl.textContent = 'Neha Bank Balance';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + nehaBankSectionHtml();
+    return;
+  }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
+    <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
 }
@@ -1379,6 +1486,49 @@ function ccSectionHtml() {
     }
     html += `</section>`;
   });
+  return html;
+}
+function nehaBankSectionHtml() {
+  const nb = getNehaBank();
+  const spent = nehaBankSpent();
+  const transferNet = nehaBankTransferNet();
+  const balance = nb.initialBalance + transferNet - spent;
+  let html = `<section class="cc-card">
+    <div class="cc-head">
+      <span class="cc-name">Neha Bank</span>
+      <span class="cc-out ${balance>=0?'ok':'due'}">₹${inr(balance)} <small>balance</small></span>
+    </div>
+    ${nehaBalanceEditControl(nb.initialBalance)}
+    <div class="cc-cyc" style="cursor:default">
+      <div class="cc-cyc-l"><div class="cc-cyc-win">Transfers (net)</div></div>
+      <div class="cc-cyc-amt">${transferNet>=0?'+':'−'}₹${inr(Math.abs(transferNet))}</div>
+    </div>
+    <div class="cc-cyc" style="cursor:default">
+      <div class="cc-cyc-l"><div class="cc-cyc-win">Spent via Neha Bank</div></div>
+      <div class="cc-cyc-amt">−₹${inr(spent)}</div>
+    </div>
+    <div class="neha-xfer-btns">
+      <button class="add-btn" onclick="openNehaXferSheet('in')">Avishek → Neha</button>
+      <button class="add-btn" onclick="openNehaXferSheet('out')">Neha → Avishek</button>
+    </div>`;
+  const transfers = nb.transfers;
+  if (transfers.length) {
+    const secId = 'neha-hist';
+    const open = isOpen(secId, 0);
+    const rows = transfers.map((t,i) => {
+      const sign = t.direction==='in' ? '+' : '−';
+      const dir  = t.direction==='in' ? 'Avishek → Neha' : 'Neha → Avishek';
+      return `<div class="cc-pay"><span>${sign}₹${inr(t.amount)} · ${fmtDMY(new Date(t.date))} (${dir})</span><button class="cc-del" onclick="deleteNehaTransfer(${i})" aria-label="delete">✕</button></div>`;
+    }).join('');
+    html += `<section class="card${open?' open':''}" data-sec="${secId}" aria-expanded="${open?'true':'false'}" style="margin-top:12px">
+      <button class="card-hd" onclick="toggleCollapse('${secId}')">
+        <span class="chev" aria-hidden="true">›</span>
+        <span class="hd-main"><span class="hd-title" style="font-size:14px">Transfer history</span><span class="hd-sub">${transfers.length} transfer${transfers.length>1?'s':''}</span></span>
+      </button>
+      <div class="card-body-wrap"><div class="card-body">${rows}</div></div>
+    </section>`;
+  }
+  html += `</section>`;
   return html;
 }
 function menuMonths() {
