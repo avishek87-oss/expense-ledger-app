@@ -1,7 +1,7 @@
 {
-    "version":  "1.5.0",
-    "url":  "https://github.com/avishek87-oss/expense-ledger-app/releases/download/v1.5.0/bundle.zip",
-    "apkVersion":  "1.2.0",
-    "apkUrl":  "https://github.com/avishek87-oss/expense-ledger-app/releases/download/v1.2.0/Household-Ledger.apk",
-    "minApk":  "1.2.0"
+    "version":  "1.6.0",
+    "url":  "https://github.com/avishek87-oss/expense-ledger-app/releases/download/v1.6.0/bundle.zip",
+    "apkVersion":  "1.6.0",
+    "apkUrl":  "https://github.com/avishek87-oss/expense-ledger-app/releases/download/v1.6.0/Household-Ledger.apk",
+    "minApk":  "1.6.0"
 }
