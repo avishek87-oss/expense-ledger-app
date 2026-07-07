@@ -47,6 +47,9 @@ button{color:inherit}
 #sync-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0}
 #sync-dot.ok{background:var(--green)}#sync-dot.busy{background:#c8a93a;animation:blink 1s infinite}#sync-dot.err{background:var(--maroon)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+#undo-btn{background:none;border:none;color:var(--ink);font-size:18px;line-height:1;cursor:pointer;padding:4px 6px;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:2px;flex-shrink:0}
+#undo-btn.hidden{display:none}
+#undo-count{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted)}
 
 /* ── Tabs ── */
 #tab-bar{display:flex;gap:2px;margin-top:12px}
@@ -217,6 +220,10 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .out-item-sub{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:2px}
 .out-item-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
 .out-amt{font-family:var(--mono);font-size:15px;color:var(--maroon);font-variant-numeric:tabular-nums}
+.out-chk{width:20px;height:20px;flex-shrink:0;accent-color:var(--ink)}
+.out-sel-bar{position:fixed;left:0;right:0;bottom:0;z-index:120;display:flex;align-items:center;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,.08)}
+.out-sel-info{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);flex:1;white-space:nowrap}
+.out-sel-clear{background:none;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--sans);font-size:13px;color:var(--muted);cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent}
 .empty-state{text-align:center;padding:64px 20px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
 .empty-state .big{font-size:40px;line-height:1}
 .empty-state .msg{font-family:var(--serif);font-size:18px;color:var(--ink);margin-top:14px}
@@ -372,6 +379,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
     <div id="hdr-top">
       <button id="hmb" onclick="openMenu()" aria-label="Menu">☰</button>
       <h1>Household Ledger<span class="sub">Avishek Family</span></h1>
+      <button id="undo-btn" class="hidden" onclick="undoLastAction()" aria-label="Undo last action" title="Undo last action">↩<span id="undo-count"></span></button>
       <div id="sync-chip" title="Your data is saved on this device">
         <span id="sync-dot"></span>
         <span id="sync-lbl">Sheets</span>
@@ -522,7 +530,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -550,6 +558,30 @@ let pendingNehaXfer = null; // { direction } while the Neha transfer sheet is op
 let menuView = 'home'; // hamburger drawer: 'home' | 'cc' | 'neha'
 let nehaEditingBalance = false;
 let heroSpendsOpen = false;
+let selectedOutKeys = new Set(); // composite keys `${mk}|${toggleType}|${toggleKey}|${toggleIdx}` selected on Outstanding
+let undoStack = []; // { prevAppState, label }, capped at 4 — in-memory only, resets on reload
+let suppressUndo = false; // set true while a batch of mutator calls should count as one undo step
+
+function pushUndo(label) {
+  if (suppressUndo) return;
+  undoStack.push({ prevAppState: appState, label });
+  if (undoStack.length > 4) undoStack.shift();
+  updateUndoBtn();
+}
+function undoLastAction() {
+  if (!undoStack.length) return;
+  const { prevAppState } = undoStack.pop();
+  appState = prevAppState;
+  saveLocal(); render(); renderMenu(); if (IN_GAS) scheduleSync();
+  updateUndoBtn();
+}
+function updateUndoBtn() {
+  const btn = document.getElementById('undo-btn');
+  if (!btn) return;
+  btn.classList.toggle('hidden', undoStack.length === 0);
+  const c = document.getElementById('undo-count');
+  if (c) c.textContent = undoStack.length || '';
+}
 
 function todayMonthKey() {
   const n = new Date();
@@ -588,6 +620,7 @@ function getNehaBank() {
   return { initialBalance: Number(n.initialBalance||0), transfers: n.transfers || [] };
 }
 function saveNehaBank(next) {
+  pushUndo('Neha Bank change');
   appState = { ...appState, nehaBank: next };
   saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
 }
@@ -623,6 +656,7 @@ function getMD()        { return getMDFor(currentMonth); }
 function getMDFor(mk)   { return { ...emptyMonth(), ...(appState.months[mk] || {}) }; }
 
 function updateMonth(patch) {
+  pushUndo('Ledger change · ' + monthLabel(currentMonth));
   const next = { ...getMD(), ...patch };
   appState = { ...appState, months: { ...appState.months, [currentMonth]: next } };
   saveLocal();
@@ -630,6 +664,7 @@ function updateMonth(patch) {
   if (IN_GAS) scheduleSync();
 }
 function updateMonthFor(mk, patch) {
+  pushUndo('Ledger change · ' + monthLabel(mk));
   const next = { ...getMDFor(mk), ...patch };
   appState = { ...appState, months: { ...appState.months, [mk]: next } };
   saveLocal();
@@ -1107,6 +1142,25 @@ function toggleOutItem(mk, type, key, idx) {
   }
 }
 
+// ── Multi-select "pay together" on Outstanding ─────────────────────────────
+function outItemKey(mk, type, key, idx) { return mk+'|'+type+'|'+key+'|'+idx; }
+function toggleOutSelect(selKey) {
+  if (selectedOutKeys.has(selKey)) selectedOutKeys.delete(selKey); else selectedOutKeys.add(selKey);
+  renderOutstanding();
+}
+function clearOutSelection() { selectedOutKeys.clear(); renderOutstanding(); }
+function startBatchPay() {
+  const keys = [...selectedOutKeys];
+  if (!keys.length) return;
+  // Exclude CC methods if any selected fixed item is CC-restricted (mirrors startPayment's per-item rule).
+  const anyNoCC = keys.some(k => { const [,itype,ikey] = k.split('|'); return itype==='fixed' && NO_CC_KEYS.has(ikey); });
+  const methods = anyNoCC ? PAY_METHODS.filter(m => m.key !== 'axisCC' && m.key !== 'scapiaCC') : PAY_METHODS;
+  pendingPay = { type:'batch', args:[keys] };
+  document.getElementById('pay-methods').innerHTML =
+    methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
+  document.getElementById('pay-overlay').classList.remove('hidden');
+}
+
 // ── Base override UI ───────────────────────────────────────────────────────
 let baseEditKey = null;
 function startBaseEdit(key) { baseEditKey = key; render(); }
@@ -1215,6 +1269,37 @@ function confirmPay(method) {
     const [mk, cat, idx] = args;
     const md = getMDFor(mk);
     updateMonthFor(mk, { [cat]:(md[cat]||[]).map((it,i)=>i===idx?{...it,paid:true,payMethod:method}:it) });
+  } else if (type === 'batch') {
+    const [keys] = args;
+    const byMonth = {};
+    keys.forEach(k => {
+      const [mk, itype, ikey, idxStr] = k.split('|');
+      (byMonth[mk] = byMonth[mk] || []).push({ itype, ikey, idx: Number(idxStr) });
+    });
+    pushUndo('Paid ' + keys.length + ' items together');
+    suppressUndo = true;
+    Object.keys(byMonth).forEach(mk => {
+      const md = getMDFor(mk);
+      const paid = { ...(md.paid||{}) };
+      const payMethod = { ...(md.payMethod||{}) };
+      const payDate = { ...(md.payDate||{}) };
+      const arrIdx = {}; // category -> Set of indices to mark paid
+      byMonth[mk].forEach(({itype, ikey, idx}) => {
+        if (itype === 'fixed') {
+          paid[ikey] = true; payMethod[ikey] = method; payDate[ikey] = today();
+        } else {
+          (arrIdx[ikey] = arrIdx[ikey] || new Set()).add(idx);
+        }
+      });
+      const patch = { paid, payMethod, payDate };
+      Object.keys(arrIdx).forEach(cat => {
+        const idxSet = arrIdx[cat];
+        patch[cat] = (md[cat]||[]).map((it,i) => idxSet.has(i) ? {...it, paid:true, payMethod:method} : it);
+      });
+      updateMonthFor(mk, patch);
+    });
+    suppressUndo = false;
+    selectedOutKeys.clear();
   }
 }
 function cancelPay() {
@@ -1359,6 +1444,7 @@ function ccBuildCycles(cardKey) {
 }
 
 function saveCcPayments(next) {
+  pushUndo('Credit card payment change');
   appState = { ...appState, ccPayments: next };
   saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
 }
@@ -2078,15 +2164,23 @@ function renderOutstanding() {
   }
 
   let html = collapseToolbar(groups.map(g => 'out-'+g.mk));
+  let selTotal = 0;
   groups.forEach(g => {
     const mTotal = g.items.reduce((s,it) => s+it.amount, 0);
     const w = maxTotal>0 ? Math.round(mTotal/maxTotal*100) : 0;
     let items = '';
     g.items.forEach(it => {
+      const selKey = outItemKey(g.mk, it.toggleType, it.toggleKey, it.toggleIdx);
+      const batchable = !FIXED_METHOD[it.toggleKey]; // rent/sukanya/carEmi auto-settle, no method choice to batch
+      const checked = selectedOutKeys.has(selKey);
+      if (batchable && checked) selTotal += it.amount;
       items += `<div class="out-item">
-        <div class="lrow-left">
-          <div class="out-item-name">${esc(it.label)}</div>
-          ${it.sub ? `<div class="out-item-sub">${esc(it.sub)}</div>` : ''}
+        <div class="lrow-left" style="display:flex;align-items:center;gap:10px">
+          ${batchable ? `<input type="checkbox" class="out-chk" ${checked?'checked':''} onchange="toggleOutSelect('${selKey}')">` : ''}
+          <div style="min-width:0">
+            <div class="out-item-name">${esc(it.label)}</div>
+            ${it.sub ? `<div class="out-item-sub">${esc(it.sub)}</div>` : ''}
+          </div>
         </div>
         <div class="out-item-right">
           <span class="out-amt">₹${inr(it.amount)}</span>
@@ -2099,6 +2193,14 @@ function renderOutstanding() {
       `<span class="tag-due">${g.items.length} item${g.items.length===1?'':'s'} due</span>`,
       '₹'+inr(mTotal), items, bar);
   });
+
+  if (selectedOutKeys.size) {
+    html += `<div class="out-sel-bar">
+      <span class="out-sel-info">${selectedOutKeys.size} selected · ₹${inr(selTotal)}</span>
+      <button class="out-sel-clear" onclick="clearOutSelection()">Clear</button>
+      <button class="add-btn" onclick="startBatchPay()">Pay together</button>
+    </div>`;
+  }
 
   document.getElementById('app-body').innerHTML = html;
 }
