@@ -599,25 +599,33 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 <div id="cc-cyc-edit-overlay" class="cc-cyc-review-overlay hidden" onclick="cancelCycleEdit()">
   <div class="pay-sheet" onclick="event.stopPropagation()" style="max-height:90vh;overflow-y:auto">
     <div class="pay-sheet-title">Edit Transaction</div>
-    <div class="cc-pay-fields">
-      <label style="display:block;margin-bottom:4px;font-size:12px;color:var(--muted)">Date</label>
-      <input id="cc-cyc-edit-date" class="cc-date" type="date">
-      <label style="display:block;margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)">Description</label>
-      <input id="cc-cyc-edit-desc" class="base-inp" type="text" placeholder="Description">
-      <label style="display:block;margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)">Amount (₹)</label>
-      <input id="cc-cyc-edit-amount" class="misc-amt" type="number" inputmode="numeric" placeholder="Amount">
-      <label style="display:block;margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)">Category</label>
-      <select id="cc-cyc-edit-cat" class="sel" style="width:100%">
-        <option value="groceries">Groceries</option>
-        <option value="householdGroceries">Household Groceries</option>
-        <option value="householdMisc">Household Misc</option>
-        <option value="aaviaMisc">Aavia Misc</option>
-        <option value="nehaMisc">Neha Misc</option>
-        <option value="avishekMisc">Avishek Misc</option>
-      </select>
+    <div style="display:flex;flex-direction:column;gap:14px;padding:0">
+      <div>
+        <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted)">Date</label>
+        <input id="cc-cyc-edit-date" class="cc-date" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--ink);font-size:14px">
+      </div>
+      <div>
+        <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted)">Description</label>
+        <input id="cc-cyc-edit-desc" class="base-inp" type="text" placeholder="e.g., Urbanclap Waxing" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--ink);font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted)">Amount (₹)</label>
+        <input id="cc-cyc-edit-amount" class="misc-amt" type="number" inputmode="numeric" placeholder="0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--ink);font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted)">Category</label>
+        <select id="cc-cyc-edit-cat" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--ink);font-size:14px;box-sizing:border-box">
+          <option value="groceries">Groceries</option>
+          <option value="householdGroceries">Household Groceries</option>
+          <option value="householdMisc">Household Misc</option>
+          <option value="aaviaMisc">Aavia Misc</option>
+          <option value="nehaMisc">Neha Misc</option>
+          <option value="avishekMisc">Avishek Misc</option>
+        </select>
+      </div>
     </div>
-    <button class="add-btn cc-pay-confirm" onclick="saveCycleEdit()">Save</button>
-    <button class="pay-cancel" onclick="cancelCycleEdit()">Cancel</button>
+    <button class="add-btn cc-pay-confirm" onclick="saveCycleEdit()" style="width:100%;margin-top:16px">Save</button>
+    <button class="pay-cancel" onclick="cancelCycleEdit()" style="width:100%;margin-top:8px">Cancel</button>
   </div>
 </div>
 
@@ -691,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.1';
+const APP_VERSION = '2.4.2';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -1567,12 +1575,13 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   const txns = [];
   Object.keys(appState.months||{}).forEach(mk => {
     const md = getMDFor(mk);
-    const mkDate = new Date(mk + '-15');
-    if (mkDate < cycleStart || mkDate > cycleEnd) return;
     ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'].forEach(cat => {
       (md[cat]||[]).forEach((it, i) => {
         if (it.paid && it.payMethod === cardKey) {
-          txns.push({ mk, cat, i, date: it.date, text: it.text||it.vendor||'', amount: Number(it.amount||0), desc: it.text||it.vendor||(cat.includes('Grocery')?'Grocery':'Item') });
+          const txnDate = new Date(it.date);
+          if (txnDate >= cycleStart && txnDate <= cycleEnd) {
+            txns.push({ mk, cat, i, date: it.date, text: it.text||it.vendor||'', amount: Number(it.amount||0), desc: it.text||it.vendor||(cat.includes('Grocery')?'Grocery':'Item') });
+          }
         }
       });
     });
