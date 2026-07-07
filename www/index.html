@@ -33,6 +33,7 @@
   --header-sticky-height:70px;--tabbar-height:52px;--month-nav-height:68px;
   --toolbar-top:calc(var(--header-sticky-height) + var(--tabbar-height) + var(--month-nav-height));
 }
+body.no-month-nav{--toolbar-top:calc(var(--header-sticky-height) + var(--tabbar-height));}
 :root[data-theme="dark"]{
   --bg:#0f1216; --card:#191d24; --card-2:#222833;
   --ink:#e7ebf0; --ink-soft:#b7c0cc;
@@ -702,7 +703,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -992,6 +993,7 @@ function switchTab(tab) {
   document.getElementById('tab-outstanding').classList.toggle('active', tab==='outstanding');
   document.getElementById('tab-payments').classList.toggle('active', tab==='payments');
   document.getElementById('month-nav').classList.toggle('hidden', tab==='outstanding');
+  document.body.classList.toggle('no-month-nav', tab==='outstanding');
   const fab = document.getElementById('fab');
   if (fab) fab.classList.toggle('hidden', tab!=='ledger'); // quick-add only on the Ledger tab
   window.scrollTo(0,0);
@@ -2091,15 +2093,14 @@ function renderMenu() {
     return;
   }
   if (menuView === 'statement') {
-    if (titleEl) titleEl.textContent = 'Upload Statement';
-    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + statementUploadHtml();
+    if (titleEl) titleEl.textContent = (CC_CYCLES[stmtCardKey]?.label || '') + ' Statement';
+    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('cc')">← Back</button>` + statementUploadHtml();
     return;
   }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
     <a class="menu-link" onclick="setMenuView('trends')">Trends <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('budgets')">Budgets <span>›</span></a>
-    <a class="menu-link" onclick="setMenuView('statement')">Upload Statement <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
     <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
@@ -2123,7 +2124,8 @@ function ccSectionHtml() {
       <div class="cc-head">
         <span class="cc-name">${cfg.label}</span>
         <span class="cc-out ${b.outstanding>0?'due':'ok'}">₹${inr(Math.max(0,b.outstanding))} <small>owed</small></span>
-      </div>`;
+      </div>
+      <button class="add-btn" style="width:100%;margin:8px 0" onclick="openStatementUpload('${cardKey}')">Upload Statement</button>`;
     // Hide fully-paid cycles — once a month's bill is settled it drops off the list.
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');
     html += visible.length
@@ -2322,8 +2324,20 @@ function donutSvg(t) {
   </div>`;
 }
 // ── CC Statement Upload + Reconciliation ──────────────────────────────────
-let stmtParsed = null; // holds {transactions: [...], matched: [...], unmatched: [...]}
-async function parseStatement(file, password) {
+let stmtParsed = null; // holds {transactions: [...], matched: [...], unmatched: [...], mismatch: {...}|null}
+let stmtCardKey = null; // which CC card the current upload session is for
+function openStatementUpload(cardKey) { stmtCardKey = cardKey; stmtParsed = null; setMenuView('statement'); }
+function extractStatementTotal(text) {
+  const m = text.match(/Total\s*(?:Amount\s*)?Due[:\s]*₹?\s*([\d,]+\.?\d*)/i);
+  return m ? Number(m[1].replace(/,/g, '')) : null;
+}
+function extractStatementPeriod(text) {
+  const m = text.match(/Statement\s*Period[:\s]*?(\d{2}\/\d{2}\/\d{4})\D+(\d{2}\/\d{2}\/\d{4})/i);
+  if (!m) return null;
+  const toIso = s => { const [d,mo,y] = s.split('/'); return `${y}-${mo}-${d}`; };
+  return { start: toIso(m[1]), end: toIso(m[2]) };
+}
+async function parseStatement(file, password, cardKey) {
   try {
     if (!window.pdfjsLib) { alert('PDF library not loaded. Refresh and try again.'); return null; }
     const arrayBuffer = await file.arrayBuffer();
@@ -2334,8 +2348,8 @@ async function parseStatement(file, password) {
       const content = await page.getTextContent();
       text += content.items.map(t => t.str).join(' ') + '\n';
     }
-    // Parse Axis statement: look for lines like "DD/MM/YYYY  Description  ₹Amount"
-    // Regex: date pattern, then description (any non-digits), then amount
+    // Generic statement format assumed for all cards for now: "DD/MM/YYYY  Description  ₹Amount".
+    // cardKey is accepted so this can be branched per-card later if a real statement layout differs.
     const lines = text.split('\n');
     const txns = [];
     const dateRegex = /(\d{2})\/(\d{2})\/(\d{4})/;
@@ -2352,19 +2366,19 @@ async function parseStatement(file, password) {
       const desc = afterDate.substring(0, amountMatch.index).trim();
       if (desc && amount > 0) txns.push({ date, desc, amount });
     });
-    return txns;
+    return { txns, total: extractStatementTotal(text), period: extractStatementPeriod(text) };
   } catch (e) {
     console.error('PDF parse error:', e);
     alert('Failed to parse PDF. Check password and file format.');
     return null;
   }
 }
-function matchTransactions(stmtTxns) {
+function matchTransactions(stmtTxns, cardKey, period) {
   const appTxns = Object.keys(appState.months||{}).flatMap(mk => {
     const md = getMDFor(mk);
     return ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc']
-      .flatMap(cat => (md[cat]||[]).map((it,i) => ({ mk, cat, i, date: it.date, amount: Number(it.amount||0), text: it.text||it.vendor||'' })));
-  });
+      .flatMap(cat => (md[cat]||[]).map((it,i) => ({ mk, cat, i, date: it.date, amount: Number(it.amount||0), text: it.text||it.vendor||'', payMethod: it.payMethod })));
+  }).filter(t => t.payMethod === cardKey && (!period || (t.date >= period.start && t.date <= period.end)));
   const matched = [], unmatched = [];
   stmtTxns.forEach(stmt => {
     const m = appTxns.find(app =>
@@ -2378,22 +2392,28 @@ function matchTransactions(stmtTxns) {
 function statementUploadHtml() {
   if (stmtParsed) {
     // Show reconciliation UI
-    const { matched, unmatched } = stmtParsed;
+    const { matched, unmatched, mismatch } = stmtParsed;
     let html = `<section class="cc-card">
-      <div class="cc-head"><span class="cc-name">Reconciliation</span></div>
-      <div class="cc-empty" style="padding-top:0">${matched.length} matched, ${unmatched.length} unmatched transaction(s).</div>`;
+      <div class="cc-head"><span class="cc-name">Reconciliation</span></div>`;
+    if (mismatch) {
+      html += `<div class="cc-empty" style="padding-top:0;background:var(--card-2);border-radius:8px;padding:10px;margin-bottom:8px">⚠ Statement total ₹${inr(mismatch.statementTotal)} doesn't match calculated total ₹${inr(mismatch.calculatedTotal)} — review for missing or duplicate entries.</div>`;
+    }
+    html += `<div class="cc-empty" style="padding-top:0">${matched.length} matched, ${unmatched.length} unmatched transaction(s).</div>`;
     if (matched.length) {
-      html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Matched (greyed out):</strong></div>`;
-      matched.forEach(({stmt, app}) => {
-        html += `<div style="opacity:0.6;padding:6px 0;font-size:13px">₹${inr(stmt.amount)} · ${fmtDMY(new Date(stmt.date))} · ${esc(stmt.desc.substring(0,40))}</div>`;
+      html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Matched (reconciled):</strong></div>`;
+      matched.forEach(({stmt}) => {
+        html += `<div style="opacity:0.6;padding:6px 0;font-size:13px">✓ ₹${inr(stmt.amount)} · ${fmtDMY(new Date(stmt.date))} · ${esc(stmt.desc.substring(0,40))}</div>`;
       });
     }
     if (unmatched.length) {
       html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Unmatched — file or review:</strong></div>`;
+      const catBtns = [['household','Household'],['neha','Neha'],['avishek','Avishek'],['aavia','Aavia']];
       unmatched.forEach((txn, i) => {
-        html += `<div class="stmt-unmatched" style="padding:8px;margin-bottom:8px;background:var(--card-2);border-radius:8px;display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:13px">₹${inr(txn.amount)} · ${fmtDMY(new Date(txn.date))}</div>
-          <button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="openFileUnmatched(${i})">File</button>
+        html += `<div class="stmt-unmatched" style="padding:8px;margin-bottom:8px;background:var(--card-2);border-radius:8px">
+          <div style="font-size:13px;margin-bottom:6px">₹${inr(txn.amount)} · ${fmtDMY(new Date(txn.date))} · ${esc((txn.desc||'').substring(0,40))}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${catBtns.map(([key,label]) => `<button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="openFileUnmatched(${i},'${key}')">${label}</button>`).join('')}
+          </div>
         </div>`;
       });
     }
@@ -2403,7 +2423,7 @@ function statementUploadHtml() {
   }
   // Show upload form
   return `<section class="cc-card">
-    <div class="cc-head"><span class="cc-name">Axis CC Statement</span></div>
+    <div class="cc-head"><span class="cc-name">${CC_CYCLES[stmtCardKey]?.label || ''} Statement</span></div>
     <div class="cc-empty" style="padding-top:0;font-size:13px">Upload a password-protected PDF statement. The app will match transactions and highlight unmatched charges for your review.</div>
     <input id="stmt-file" class="base-inp" type="file" accept=".pdf" style="width:100%;margin-top:10px;margin-bottom:8px">
     <input id="stmt-pwd" class="base-inp" type="password" placeholder="PDF password" style="width:100%;margin-bottom:8px">
@@ -2414,23 +2434,35 @@ async function submitStatementUpload() {
   const file = document.getElementById('stmt-file').files[0];
   const pwd = document.getElementById('stmt-pwd').value;
   if (!file || !pwd) { alert('Please select a file and enter password'); return; }
-  const txns = await parseStatement(file, pwd);
-  if (!txns) return;
-  const { matched, unmatched } = matchTransactions(txns);
-  stmtParsed = { transactions: txns, matched, unmatched };
+  const parsed = await parseStatement(file, pwd, stmtCardKey);
+  if (!parsed) return;
+  const { txns, total, period } = parsed;
+  const { matched, unmatched } = matchTransactions(txns, stmtCardKey, period);
+  // Persist reconciliation: matched ledger items get a new, purely-additive `reconciled` flag.
+  // This is separate from `paid`/`payMethod`, which already drive the CC outstanding-balance math.
+  matched.forEach(({app}) => {
+    const md = getMDFor(app.mk);
+    updateMonthFor(app.mk, { [app.cat]: (md[app.cat]||[]).map((it,idx)=>idx===app.i?{...it, reconciled:true}:it) });
+  });
+  let mismatch = null;
+  if (total != null && txns.length) {
+    const repDate = txns.reduce((a,b) => a.date > b.date ? a : b).date;
+    const cyc = ccCycleOf(stmtCardKey, repDate);
+    const cycle = ccBuildCycles(stmtCardKey).cycles.find(c => c.key === cyc.key);
+    if (cycle && Math.abs(cycle.total - total) > 5) mismatch = { statementTotal: total, calculatedTotal: cycle.total };
+  }
+  stmtParsed = { transactions: txns, matched, unmatched, mismatch };
   renderMenu();
 }
-function resetStatement() { stmtParsed = null; setMenuView('home'); }
-function openFileUnmatched(idx) {
+function resetStatement() { stmtParsed = null; stmtCardKey = null; setMenuView('cc'); }
+function openFileUnmatched(idx, sectionKey) {
   const txn = stmtParsed.unmatched[idx];
-  const section = prompt('File into which section?\n\nHousehold, Neha, Avishek, Aavia');
-  if (!section) return;
   const catMap = { household: 'householdMisc', neha: 'nehaMisc', avishek: 'avishekMisc', aavia: 'aaviaMisc' };
-  const cat = catMap[section.toLowerCase()];
-  if (!cat) { alert('Invalid section.'); return; }
+  const cat = catMap[sectionKey];
+  if (!cat) return;
   const mk = clampMonth(monthKeyOf(txn.date));
   const tmd = getMDFor(mk);
-  updateMonthFor(mk, { [cat]: [...(tmd[cat]||[]), { text: txn.desc, amount: txn.amount, date: txn.date, paid: true, payMethod: 'axisCC' }] });
+  updateMonthFor(mk, { [cat]: [...(tmd[cat]||[]), { text: txn.desc, amount: txn.amount, date: txn.date, paid: true, payMethod: stmtCardKey, reconciled: true }] });
   stmtParsed.unmatched.splice(idx, 1);
   renderMenu();
 }
