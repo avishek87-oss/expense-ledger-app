@@ -699,7 +699,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '2.4.6';
+const APP_VERSION = '2.4.7';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -725,6 +725,7 @@ let pendingPay = null;
 let pendingCcPay = null; // { cardKey, cycleKey } while the CC pay sheet is open
 let pendingNehaXfer = null; // { direction } while the Neha transfer sheet is open
 let menuView = 'home'; // hamburger drawer: 'home' | 'cc' | 'neha'
+let menuBackHandler = null;
 let nehaEditingBalance = false;
 let heroSpendsOpen = false;
 let selectedOutKeys = new Set(); // composite keys `${mk}|${toggleType}|${toggleKey}|${toggleIdx}` selected on Outstanding
@@ -1456,7 +1457,9 @@ function startPayment(type, ...args) {
   pendingPay = { type, args };
   document.getElementById('pay-methods').innerHTML =
     methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
-  document.getElementById('pay-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('pay-overlay');
+  overlay.classList.remove('hidden');
+  attachOverlayBackHandler('pay-overlay', cancelPay);
 }
 function confirmPay(method) {
   if (!pendingPay) return;
@@ -1531,7 +1534,9 @@ function openCcPaySheet(cardKey, cycleKey, label, remaining) {
   document.getElementById('cc-pay-title').textContent = label + ' · ₹' + inr(Math.max(0,remaining)) + ' due';
   document.getElementById('cc-pay-amt').value = Math.max(0, Math.round(remaining));
   document.getElementById('cc-pay-date').value = today();
-  document.getElementById('cc-pay-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('cc-pay-overlay');
+  overlay.classList.remove('hidden');
+  attachOverlayBackHandler('cc-pay-overlay', cancelCcPay);
 }
 function confirmCcPay() {
   if (!pendingCcPay) return;
@@ -1548,72 +1553,44 @@ function cancelCcPay() {
   document.getElementById('cc-pay-overlay').classList.add('hidden');
 }
 
-// ── CC Cycle Review (show & edit transactions before payment) ──────────────
-let pendingCycleReview = null;
-let cycleReviewSwipe = null;
-let cycleBackHandler = null;
-
-function cycleReviewSwipeStart(e) {
-  if (!e.target.closest('#cc-cyc-review-overlay')) return;
-  const t = e.touches[0];
-  cycleReviewSwipe = { x0: t.clientX, y0: t.clientY, dx: 0, dy: 0 };
-}
-function cycleReviewSwipeMove(e) {
-  if (!cycleReviewSwipe) return;
-  const t = e.touches[0];
-  cycleReviewSwipe.dx = t.clientX - cycleReviewSwipe.x0;
-  cycleReviewSwipe.dy = t.clientY - cycleReviewSwipe.y0;
-}
-function cycleReviewSwipeEnd(e) {
-  if (!cycleReviewSwipe) return;
-  const { dx, dy } = cycleReviewSwipe;
-  cycleReviewSwipe = null;
-  if (dx < -80 || dy > 80) closeCycleReview();
-}
-function setupCycleBackHandler() {
-  if (cycleBackHandler) return;
-  cycleBackHandler = (e) => {
-    if (!pendingCycleReview) return;
-    if (e.key === 'Escape') { e.preventDefault(); closeCycleReview(); }
+// ── Overlay back button close handler ──────────────────────────────────────
+function attachOverlayBackHandler(overlayId, onClose) {
+  const overlay = document.getElementById(overlayId);
+  if (!overlay) return;
+  const backHandler = (e) => {
+    if (overlay.classList.contains('hidden')) return;
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
   };
-  document.addEventListener('keydown', cycleBackHandler);
+  document.addEventListener('keydown', backHandler);
   const App = getNativePlugin('App');
   if (App) {
     try {
       App.addListener('backButton', () => {
-        if (pendingCycleReview) closeCycleReview();
+        if (!overlay.classList.contains('hidden')) onClose();
       });
     } catch(e){}
   }
+  return backHandler;
 }
-function clearCycleBackHandler() {
-  if (cycleBackHandler) {
-    document.removeEventListener('keydown', cycleBackHandler);
-    cycleBackHandler = null;
-  }
-}
+
+// ── CC Cycle Review (show & edit transactions before payment) ──────────────
+let pendingCycleReview = null;
+let cycleBackHandler = null;
 
 function openCcCycleReview(cardKey, cycleKey, label, total) {
   pendingCycleReview = { cardKey, cycleKey, label, total };
   const html = ccCycleTransactionsHtml(cardKey, cycleKey, label, total);
   document.getElementById('cc-cyc-review-content').innerHTML = html;
   document.getElementById('cc-cyc-review-overlay').classList.remove('hidden');
-  setupCycleBackHandler();
-  const overlay = document.getElementById('cc-cyc-review-overlay');
-  overlay.addEventListener('touchstart', cycleReviewSwipeStart, { passive: true });
-  overlay.addEventListener('touchmove', cycleReviewSwipeMove, { passive: true });
-  overlay.addEventListener('touchend', cycleReviewSwipeEnd, { passive: true });
-  overlay.addEventListener('touchcancel', cycleReviewSwipeEnd, { passive: true });
+  cycleBackHandler = attachOverlayBackHandler('cc-cyc-review-overlay', closeCycleReview);
 }
 function closeCycleReview() {
   pendingCycleReview = null;
   document.getElementById('cc-cyc-review-overlay').classList.add('hidden');
-  clearCycleBackHandler();
-  const overlay = document.getElementById('cc-cyc-review-overlay');
-  overlay.removeEventListener('touchstart', cycleReviewSwipeStart);
-  overlay.removeEventListener('touchmove', cycleReviewSwipeMove);
-  overlay.removeEventListener('touchend', cycleReviewSwipeEnd);
-  overlay.removeEventListener('touchcancel', cycleReviewSwipeEnd);
+  if (cycleBackHandler) {
+    document.removeEventListener('keydown', cycleBackHandler);
+    cycleBackHandler = null;
+  }
 }
 function confirmCycleReview() {
   if (!pendingCycleReview) return;
@@ -1692,7 +1669,9 @@ function openCycleEditForm(mk, cat, i) {
   amtField.value = Math.round(it.amount);
   catField.value = cat;
   document.getElementById('cc-cyc-edit-title').textContent = 'Edit Transaction';
-  document.getElementById('cc-cyc-edit-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('cc-cyc-edit-overlay');
+  overlay.classList.remove('hidden');
+  attachOverlayBackHandler('cc-cyc-edit-overlay', cancelCycleEdit);
 }
 function cancelCycleEdit() {
   pendingCycleEdit = null;
@@ -1767,7 +1746,9 @@ function openNehaXferSheet(direction) {
   document.getElementById('neha-xfer-title').textContent = direction === 'in' ? 'Avishek → Neha' : 'Neha → Avishek';
   document.getElementById('neha-xfer-amt').value = '';
   document.getElementById('neha-xfer-date').value = today();
-  document.getElementById('neha-xfer-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('neha-xfer-overlay');
+  overlay.classList.remove('hidden');
+  attachOverlayBackHandler('neha-xfer-overlay', cancelNehaXfer);
 }
 function confirmNehaXfer() {
   if (!pendingNehaXfer) return;
@@ -1937,8 +1918,19 @@ function heroSpendsHtml(mk) {
 }
 
 // ── Hamburger drawer ───────────────────────────────────────────────────────
-function openMenu()  { menuView = 'home'; renderMenu(); document.getElementById('menu-overlay').classList.remove('hidden'); }
-function closeMenu() { document.getElementById('menu-overlay').classList.add('hidden'); }
+function openMenu()  {
+  menuView = 'home';
+  renderMenu();
+  document.getElementById('menu-overlay').classList.remove('hidden');
+  menuBackHandler = attachOverlayBackHandler('menu-overlay', closeMenu);
+}
+function closeMenu() {
+  document.getElementById('menu-overlay').classList.add('hidden');
+  if (menuBackHandler) {
+    document.removeEventListener('keydown', menuBackHandler);
+    menuBackHandler = null;
+  }
+}
 function setMenuView(v) { menuView = v; renderMenu(); }
 
 // ── Quick-add (floating +) ─────────────────────────────────────────────────
@@ -1948,7 +1940,9 @@ function openQuickAdd() {
   document.getElementById('qa-amt').value = '';
   document.getElementById('qa-date').value = today();
   qaBucketChanged();
-  document.getElementById('qa-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('qa-overlay');
+  overlay.classList.remove('hidden');
+  attachOverlayBackHandler('qa-overlay', closeQuickAdd);
 }
 function closeQuickAdd() { document.getElementById('qa-overlay').classList.add('hidden'); }
 function qaBucketChanged() {
@@ -1978,10 +1972,12 @@ function submitQuickAdd() {
 // ── Search (all transactions, all months) ──────────────────────────────────
 const SEARCH_CATS = { groceries:'Groceries', householdGroceries:'HH Groceries', householdMisc:'HH Misc', aaviaMisc:'Aavia', nehaMisc:'Neha', avishekMisc:'Avishek' };
 function openSearch() {
-  document.getElementById('search-overlay').classList.remove('hidden');
+  const overlay = document.getElementById('search-overlay');
+  overlay.classList.remove('hidden');
   const inp = document.getElementById('search-inp');
   inp.value = ''; renderSearch();
   setTimeout(() => inp.focus(), 50);
+  attachOverlayBackHandler('search-overlay', closeSearch);
 }
 function closeSearch() { document.getElementById('search-overlay').classList.add('hidden'); }
 function searchIndex() {
