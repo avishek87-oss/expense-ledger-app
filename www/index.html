@@ -21,11 +21,27 @@
   --green:#2f7a5c; --green-soft:#8fbfa8;
   --cream:#eef1f4;
   --accent:#3452c0; --accent-soft:#9fb0e0;
+  /* semantic surfaces — the hero stays a dark feature panel in both themes */
+  --hero-bg:#171b21; --hero-fg:#eef1f4;
+  --input-bg:#ffffff; --hdr-bg:rgba(238,241,244,.92); --due-amber:#a9782f;
   --serif:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
   --shadow:0 1px 2px rgba(20,30,50,.04),0 6px 20px rgba(20,30,50,.06);
   --radius:10px;
+}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --card:#191d24; --card-2:#222833;
+  --ink:#e7ebf0; --ink-soft:#b7c0cc;
+  --muted:#8b95a3; --faint:#5c6675;
+  --border:#2b323d; --line:#232a33;
+  --maroon:#e28078; --maroon-soft:#7d3b36;
+  --green:#5fb492; --green-soft:#315a48;
+  --cream:#0f1216;
+  --accent:#7d93ec; --accent-soft:#3c4a78;
+  --hero-bg:#20263a; --hero-fg:#eef1f4;
+  --input-bg:#222833; --hdr-bg:rgba(15,18,22,.92); --due-amber:#d6a95a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4);
 }
 html{-webkit-text-size-adjust:100%}
 body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased}
@@ -38,7 +54,7 @@ button{color:inherit}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
 
 /* ══ Header ══ */
-#hdr{position:sticky;top:0;z-index:100;background:rgba(238,241,244,.92);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border);padding:12px 16px 0;padding-top:calc(12px + env(safe-area-inset-top))}
+#hdr{position:sticky;top:0;z-index:100;background:var(--hdr-bg);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border);padding:12px 16px 0;padding-top:calc(12px + env(safe-area-inset-top))}
 #hdr-inner{max-width:1140px;margin:0 auto}
 #hdr-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #hdr h1{font-size:19px;letter-spacing:-0.015em;font-weight:600}
@@ -60,7 +76,7 @@ button{color:inherit}
 #month-nav{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0}
 #month-nav.hidden{display:none}
 .nav-btn{width:44px;height:44px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:22px;color:var(--ink);display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:background .15s,border-color .15s}
-.nav-btn:hover{border-color:var(--ink);background:#fff}
+.nav-btn:hover{border-color:var(--ink);background:var(--input-bg)}
 #month-lbl{font-family:var(--serif);font-size:18px;font-weight:600;min-width:150px;text-align:center;letter-spacing:-0.01em}
 #month-lbl .yr{color:var(--muted);font-weight:400}
 .today-jump{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--maroon);background:none;border:1px solid var(--maroon);border-radius:999px;padding:5px 11px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;font-weight:600}
@@ -70,7 +86,7 @@ button{color:inherit}
 main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 
 /* ── Hero ── */
-.hero{background:var(--ink);color:var(--cream);border-radius:14px;padding:22px 22px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero{background:var(--hero-bg);color:var(--hero-fg);border-radius:14px;padding:22px 22px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .hero::after{content:"";position:absolute;top:0;right:0;width:180px;height:180px;background:radial-gradient(circle at top right,rgba(255,255,255,.06),transparent 70%);pointer-events:none}
 .hero-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .hero-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:rgba(247,244,236,.6);font-weight:600}
@@ -78,7 +94,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .hero-num.g{color:#a9c6a9}
 .hero-stats{display:flex;gap:26px;padding-bottom:3px}
 .hstat .k{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(247,244,236,.55);font-weight:600}
-.hstat .v{font-family:var(--mono);font-size:16px;margin-top:3px;color:var(--cream);font-variant-numeric:tabular-nums}
+.hstat .v{font-family:var(--mono);font-size:16px;margin-top:3px;color:var(--hero-fg);font-variant-numeric:tabular-nums}
 .hstat .v.g{color:#a9c6a9}
 .hero-bar{height:8px;border-radius:99px;background:rgba(247,244,236,.14);margin-top:18px;overflow:hidden}
 .hero-bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#5c7fe0);border-radius:99px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
@@ -156,7 +172,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .field-lbl{font-family:var(--sans);font-size:12px;color:var(--muted)}
 .stepper{display:flex;align-items:center;gap:10px}
 .sbtn{width:44px;height:44px;border-radius:8px;border:1px solid var(--border);background:var(--card-2);cursor:pointer;font-size:22px;color:var(--ink);display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
-.sbtn:hover{border-color:var(--ink);background:#fff}
+.sbtn:hover{border-color:var(--ink);background:var(--input-bg)}
 .sval{font-family:var(--mono);font-size:17px;min-width:30px;text-align:center;font-variant-numeric:tabular-nums}
 
 /* ── Date chips ── */
@@ -174,9 +190,9 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 
 /* ── Add row + misc list ── */
 .misc-add,.g-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 0 4px}
-.misc-txt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);flex:1;min-width:120px;min-height:44px}
-.misc-amt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:16px;background:#fff;color:var(--ink);width:100px;min-height:44px}
-.sel{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);min-height:44px}
+.misc-txt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:var(--input-bg);color:var(--ink);flex:1;min-width:120px;min-height:44px}
+.misc-amt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:16px;background:var(--input-bg);color:var(--ink);width:100px;min-height:44px}
+.sel{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:var(--input-bg);color:var(--ink);min-height:44px}
 .misc-txt:focus,.misc-amt:focus,.sel:focus{outline:none;border-color:var(--ink)}
 .add-btn{background:var(--ink);color:var(--cream);border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent;transition:filter .15s}
 .add-btn:hover{filter:brightness(1.25)}
@@ -185,7 +201,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .mitem-txt{font-size:15px;color:var(--ink)}
 .g-item-txt{font-family:var(--sans);font-size:14px;color:var(--ink-soft)}
 .mitem-date,.g-item-date{font-family:var(--sans);font-size:12px;color:var(--faint);margin-top:2px}
-.misc-date{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;color:var(--ink);min-height:44px;font-family:var(--sans)}
+.misc-date{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--input-bg);color:var(--ink);min-height:44px;font-family:var(--sans)}
 .item-date-inp{border:none;background:none;color:var(--muted);font-family:var(--sans);padding:2px 0;margin-top:1px;min-height:26px}
 .date-chip{position:relative;display:inline-flex;align-items:center;margin-top:2px}
 .date-chip-lbl{font-family:var(--sans);font-size:12px;color:var(--muted);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px}
@@ -209,7 +225,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .base-lbl{font-family:var(--sans);font-size:14px;color:var(--muted)}
 .base-edit-btn{background:none;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:4px 8px;line-height:1;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent;transition:color .15s}
 .base-edit-btn:hover{color:var(--ink)}
-.base-inp{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:16px;width:110px;background:#fff;color:var(--ink);min-height:44px}
+.base-inp{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:16px;width:110px;background:var(--input-bg);color:var(--ink);min-height:44px}
 .base-ok{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent}
 .base-cancel{background:none;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--sans);font-size:13px;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent;color:var(--ink)}
 
@@ -288,13 +304,13 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .cc-cyc{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}
 .cc-cyc-win{font-family:var(--sans);font-size:14px;color:var(--ink)}
 .cc-cyc-sub{font-family:var(--sans);font-size:12px;margin-top:2px;color:var(--muted)}
-.cc-cyc-sub.over{color:var(--maroon)} .cc-cyc-sub.due{color:#a9782f} .cc-cyc-sub.ok{color:var(--green)} .cc-cyc-sub.cur{color:var(--muted)}
+.cc-cyc-sub.over{color:var(--maroon)} .cc-cyc-sub.due{color:var(--due-amber)} .cc-cyc-sub.ok{color:var(--green)} .cc-cyc-sub.cur{color:var(--muted)}
 .cc-cyc-amt{font-family:var(--mono);font-size:15px;font-weight:600;white-space:nowrap}
 .cc-empty{font-family:var(--sans);font-size:13px;color:var(--faint);padding:8px 0}
 .cc-pays{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 .cc-pay{display:flex;align-items:center;justify-content:space-between;font-family:var(--sans);font-size:12.5px;color:var(--green);padding:2px 0}
 .cc-del{background:none;border:none;color:var(--faint);font-size:14px;cursor:pointer;min-height:32px;min-width:32px;-webkit-tap-highlight-color:transparent}
-.cc-date{border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-family:var(--sans);font-size:16px;background:#fff;color:var(--ink);min-height:44px}
+.cc-date{border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-family:var(--sans);font-size:16px;background:var(--input-bg);color:var(--ink);min-height:44px}
 .ms-month{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow)}
 .ms-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
 .ms-head span:first-child{font-family:var(--serif);font-size:16px;font-weight:600}
@@ -308,7 +324,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .login-box{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:36px 28px;width:100%;max-width:360px;text-align:center}
 .login-title{font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px}
 .login-sub{font-family:var(--sans);font-size:14px;color:var(--muted);margin-bottom:28px}
-.login-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent}
+.login-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent}
 .login-err{font-family:var(--sans);font-size:13px;color:var(--maroon);margin-top:16px;min-height:18px}
 .pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 .pay-overlay.hidden{display:none}
@@ -316,7 +332,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pay-sheet-title{font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;margin-bottom:16px;text-align:center}
 .pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .pmth-btn{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:15px 12px;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
-.pmth-btn:hover{border-color:var(--ink);background:#fff}
+.pmth-btn:hover{border-color:var(--ink);background:var(--input-bg)}
 .pay-cancel{width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;color:var(--muted);cursor:pointer;min-height:50px;-webkit-tap-highlight-color:transparent;margin-top:4px}
 #cc-pay-overlay{z-index:360} /* above the hamburger drawer (350) — CC screen lives inside it */
 #neha-xfer-overlay{z-index:360} /* same reason — Neha Bank screen also lives inside the drawer */
@@ -333,11 +349,22 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .pmth-total-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
 .pmth-total-val{font-family:var(--mono);font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
 </style>
+<script>
+// Resolve theme before first paint so the splash/app render in the right theme (no flash).
+(function(){
+  try {
+    var ui = JSON.parse(localStorage.getItem('household-ledger-ui-v1') || '{}');
+    var pref = ui.theme || 'auto';
+    var dark = pref === 'dark' || (pref === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches);
+    if (dark) document.documentElement.setAttribute('data-theme','dark');
+  } catch(e){}
+})();
+</script>
 </head>
 <body>
 
 <!-- Launch splash: first painted element, inline styles so it shows before the main stylesheet loads (seamless handoff from the native splash). -->
-<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1f4;transition:opacity .45s ease">
+<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);transition:opacity .45s ease">
   <div id="launch-logo" style="width:96px;height:96px">
     <svg viewBox="0 0 512 512" width="96" height="96" xmlns="http://www.w3.org/2000/svg">
       <rect width="512" height="512" rx="80" fill="#171b21"/>
@@ -349,16 +376,16 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
       <rect x="258" y="310" width="96" height="28" rx="4" fill="#3452c0"/>
     </svg>
   </div>
-  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:#171b21">Household Ledger</div>
-  <div style="margin-top:4px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#6b7684">Avishek Family</div>
-  <div id="launch-track" style="margin-top:34px;width:180px;height:4px;border-radius:999px;background:#dde2e7;overflow:hidden">
-    <div id="launch-bar" style="height:100%;width:8%;border-radius:999px;background:#3452c0;transition:width .4s ease"></div>
+  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:var(--ink)">Household Ledger</div>
+  <div style="margin-top:4px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Avishek Family</div>
+  <div id="launch-track" style="margin-top:34px;width:180px;height:4px;border-radius:999px;background:var(--border);overflow:hidden">
+    <div id="launch-bar" style="height:100%;width:8%;border-radius:999px;background:var(--accent);transition:width .4s ease"></div>
   </div>
-  <div id="launch-status" style="margin-top:14px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12.5px;color:#6b7684;min-height:16px">Starting…</div>
+  <div id="launch-status" style="margin-top:14px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:12.5px;color:var(--muted);min-height:16px">Starting…</div>
 </div>
 
 <!-- Mandatory native-update gate (shown only when the installed APK is too old for the current web bundle). -->
-<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#eef1f4;padding:28px;text-align:center">
+<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);padding:28px;text-align:center">
   <svg viewBox="0 0 512 512" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
     <rect width="512" height="512" rx="80" fill="#171b21"/>
     <rect x="130" y="110" width="252" height="292" rx="12" fill="#eef1f4"/>
@@ -368,10 +395,10 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
     <rect x="158" y="310" width="80" height="28" rx="4" fill="#b8433c"/>
     <rect x="258" y="310" width="96" height="28" rx="4" fill="#3452c0"/>
   </svg>
-  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:#171b21">Update required</div>
-  <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:#3b4453">A new version of the app is available. Please download and install it to continue.</div>
-  <button id="apk-gate-btn" style="margin-top:26px;background:#171b21;color:#eef1f4;border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
-  <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:#a7b0ba"></div>
+  <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:var(--ink)">Update required</div>
+  <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:var(--ink-soft)">A new version of the app is available. Please download and install it to continue.</div>
+  <button id="apk-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--bg);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
+  <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:var(--faint)"></div>
 </div>
 
 <div id="hdr">
@@ -530,7 +557,7 @@ const CC_CYCLES = {
 };
 
 // ── App config ─────────────────────────────────────────────────────────────
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '2.0.0';
 // Google Apps Script JSON API over the shared household Google Sheet.
 // Set after deploying Code.gs as a web app (the /exec URL). Empty = sync off.
 const GAS_URL = '__GAS_URL__';
@@ -682,6 +709,31 @@ function loadUI() {
 }
 function saveUI() {
   try { localStorage.setItem(UI_KEY, JSON.stringify(uiPrefs)); } catch(e){}
+}
+
+// ── Theme (light / dark / auto) ────────────────────────────────────────────
+function themePref() { return uiPrefs.theme || 'auto'; }
+function resolveDark(pref) {
+  return pref === 'dark' || (pref === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches);
+}
+function applyTheme() {
+  const dark = resolveDark(themePref());
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', dark ? '#0f1216' : '#eef1f4');
+}
+function cycleTheme() {
+  const order = ['auto','light','dark'];
+  uiPrefs.theme = order[(order.indexOf(themePref()) + 1) % order.length];
+  saveUI(); applyTheme(); renderMenu();
+}
+function themeLabel() {
+  const p = themePref();
+  return p === 'auto' ? 'Auto' : p === 'dark' ? 'Dark' : 'Light';
+}
+// Keep 'auto' in step with the OS if the system theme flips while the app is open.
+if (window.matchMedia) {
+  try { matchMedia('(prefers-color-scheme:dark)').addEventListener('change', () => { if (themePref()==='auto') applyTheme(); }); } catch(e){}
 }
 
 // ── Pure calc helpers ──────────────────────────────────────────────────────
@@ -1050,9 +1102,14 @@ async function pullFromSheets() {
       const res = await fetch(GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken));
       return res.json();
     });
+    // A local edit may have landed while the fetch was in flight — if so, don't
+    // clobber it; the pending push will carry our data up instead. (Closes a
+    // read-modify-write race that could reset just-entered values, e.g. the
+    // Neha opening balance, back to the older remote value.)
+    if (pushBusy || pushDirty || syncTimer) { setSyncState('ok'); return; }
     if (j && j.ok) {
       const remote = JSON.parse(j.data);
-      if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; saveLocal(); render(); }
+      if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; saveLocal(); render(); renderMenu(); }
       setSyncState('ok');
     } else setSyncState('err');
   } catch (e) {
@@ -1528,6 +1585,7 @@ function renderMenu() {
   el.innerHTML = `
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
+    <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
 }
@@ -2300,6 +2358,7 @@ function showApkGate(apkUrl, installedVer, needVer) {
 async function boot() {
   loadLocal();
   loadUI();
+  applyTheme();
   loadAuth();
   render();
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
