@@ -813,44 +813,48 @@ function pruneTrash() {
 function openTrashView() { pruneTrash(); setMenuView('trash'); }
 
 // ── Activity log view — reads the separate ActivityLog sheet, not appState ──
+const ACTIVITY_LIMIT = 10;
 let activityEntries = [];
-let activityWindowDays = 7;
 let activityLoading = false;
 function openActivityView() {
-  activityWindowDays = 7;
   setMenuView('activity');
   loadActivityLog();
 }
 async function loadActivityLog() {
   if (!IN_GAS || !auth || !auth.idToken) { activityEntries = []; renderMenu(); return; }
   activityLoading = true; renderMenu();
+  let entries = [];
   try {
-    const since = new Date(Date.now() - activityWindowDays*24*60*60*1000).toISOString();
-    const url = GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken) + '&op=getLog&since=' + encodeURIComponent(since);
-    const res = await fetch(url);
-    const j = await res.json();
-    activityEntries = (j && j.ok && j.entries) || [];
+    // The log endpoint filters by date, not count, so widen the window until
+    // we have enough rows to show the last ACTIVITY_LIMIT changes (or give up at ~1yr).
+    for (let days = 7; days <= 365; days *= 4) {
+      const since = new Date(Date.now() - days*24*60*60*1000).toISOString();
+      const url = GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken) + '&op=getLog&since=' + encodeURIComponent(since);
+      const res = await fetch(url);
+      const j = await res.json();
+      entries = (j && j.ok && j.entries) || [];
+      if (entries.length >= ACTIVITY_LIMIT) break;
+    }
   } catch (e) {
-    activityEntries = [];
+    entries = [];
   }
+  activityEntries = entries.slice(0, ACTIVITY_LIMIT);
   activityLoading = false;
   renderMenu();
-}
-function loadOlderActivity() {
-  activityWindowDays += 7;
-  loadActivityLog();
 }
 function activitySectionHtml() {
   if (activityLoading) {
     return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div><div class="cc-empty" style="padding-top:0">Loading…</div></section>`;
   }
+  if (!activityEntries.length) {
+    return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div>
+      <div class="cc-empty" style="padding-top:0">Nothing here yet — changes you and Neha make will show up here.</div></section>`;
+  }
   const rows = activityEntries.map(e =>
-    `<div class="cc-pay"><span>${esc(e.email)} ${esc(e.entry)} · ${fmtDMY(new Date(e.ts))}</span></div>`
+    `<div class="cc-pay"><span>${esc(e.email)} · ${esc(e.entry)} · ${fmtDMY(new Date(e.ts))}</span></div>`
   ).join('');
   return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div>
-    ${activityEntries.length ? rows : `<div class="cc-empty" style="padding-top:0">No activity in the last ${activityWindowDays} days.</div>`}
-    <button class="add-btn" style="width:100%;margin-top:10px" onclick="loadOlderActivity()">Load older</button>
-  </section>`;
+    <div class="cc-empty" style="padding-top:0;font-size:13px">Last ${activityEntries.length} changes.</div>${rows}</section>`;
 }
 function restoreFromTrash(id) {
   const entry = getTrash().find(t => t.id === id);
