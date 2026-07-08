@@ -48,7 +48,7 @@ body.no-month-nav{--toolbar-top:calc(var(--header-sticky-height) + var(--tabbar-
   --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4);
 }
 html{-webkit-text-size-adjust:100%}
-body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
 input,select,button{font-family:inherit;-webkit-appearance:none}
 /* 16px minimum on all text inputs/selects prevents Android auto-zoom on focus */
 input:not([type=checkbox]),select,textarea{font-size:16px}
@@ -87,7 +87,7 @@ button{color:inherit}
 .today-jump.hidden{display:none}
 
 /* ══ Main ══ */
-main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
+main{max-width:1140px;margin:0 auto;padding:16px 16px 96px;flex:1;width:100%;display:flex;flex-direction:column}
 
 /* ── Hero ── */
 .hero{background:var(--hero-bg);color:var(--hero-fg);border-radius:14px;padding:22px 22px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
@@ -249,7 +249,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px}
 .empty-state .msg{font-family:var(--serif);font-size:18px;color:var(--ink);margin-top:14px}
 .empty-state .sub{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:6px}
 
-footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--faint);padding:32px 0 8px;letter-spacing:.02em}
+footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--faint);padding:32px 0 8px;letter-spacing:.02em;margin-top:auto}
 
 /* ══ Responsive ══ */
 @media (min-width:720px){
