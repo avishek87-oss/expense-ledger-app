@@ -699,6 +699,9 @@ const MAIDS = [
 const SUKANYA = 12500;
 const STORAGE_KEY = 'household-ledger-v1';
 const UI_KEY = 'household-ledger-ui-v1';
+const PENDING_SYNC_KEY = 'household-ledger-pending-sync-v1';
+const LAST_VERSION_CHECK_KEY = 'household-ledger-last-version-check-v1';
+const VERSION_CHECK_THROTTLE_MS = 4*60*60*1000; // don't re-check version.json more than once per 4h
 const MIN_MONTH = '2026-03';
 
 const PAY_METHODS = [
@@ -827,16 +830,13 @@ async function loadActivityLog() {
   activityLoading = true; renderMenu();
   let entries = [];
   try {
-    // The log endpoint filters by date, not count, so widen the window until
-    // we have enough rows to show the last ACTIVITY_LIMIT changes (or give up at ~1yr).
-    for (let days = 7; days <= 365; days *= 4) {
-      const since = new Date(Date.now() - days*24*60*60*1000).toISOString();
-      const url = GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken) + '&op=getLog&since=' + encodeURIComponent(since);
-      const res = await fetch(url);
-      const j = await res.json();
-      entries = (j && j.ok && j.entries) || [];
-      if (entries.length >= ACTIVITY_LIMIT) break;
-    }
+    // The log endpoint filters by date, not count — 90 days back is plenty
+    // to cover the last ACTIVITY_LIMIT changes for a regularly-used ledger.
+    const since = new Date(Date.now() - 90*24*60*60*1000).toISOString();
+    const url = GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken) + '&op=getLog&since=' + encodeURIComponent(since);
+    const res = await fetch(url);
+    const j = await res.json();
+    entries = (j && j.ok && j.entries) || [];
   } catch (e) {
     entries = [];
   }
@@ -965,6 +965,13 @@ function updateMonthFor(mk, patch, logMsg) {
 function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); }
 function loadLocal() {
   try { const r = localStorage.getItem(STORAGE_KEY); if (r) appState = JSON.parse(r); } catch(e){}
+}
+// Durable "a save hasn't made it to the sheet yet" flag — survives an app
+// restart, unlike the in-memory pushBusy/pushDirty/syncTimer flags, so a
+// push that failed right before the app closed still gets retried on boot.
+function getPendingSync() { return localStorage.getItem(PENDING_SYNC_KEY) === '1'; }
+function setPendingSync(v) {
+  try { if (v) localStorage.setItem(PENDING_SYNC_KEY, '1'); else localStorage.removeItem(PENDING_SYNC_KEY); } catch(e){}
 }
 function loadUI() {
   try { const r = localStorage.getItem(UI_KEY); if (r) uiPrefs = { collapsed:{}, ...JSON.parse(r) }; } catch(e){}
@@ -1333,8 +1340,21 @@ async function doLogin() {
 // preflight OPTIONS, but returns Access-Control-Allow-Origin:* on simple ones.
 let pushDirty = false;   // a save happened while a push was in flight
 let pushBusy  = false;
+let lastPullAt = 0;
 
-function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500); }
+// Bounds how long a GAS round trip can hang (e.g. a cold Apps Script
+// container) instead of relying on the browser's much longer default timeout.
+function fetchWithTimeout(url, opts, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms || 8000);
+  return fetch(url, { ...(opts || {}), signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
+function scheduleSync() {
+  setPendingSync(true);
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500);
+}
 
 // Fire-and-forget activity log entry — appended as a row in a separate Sheet
 // tab (not the synced appState blob), so it never affects the main sync payload
@@ -1367,18 +1387,20 @@ async function withAuthRetry(call) {
 
 async function pushToSheets() {
   if (pushBusy) { pushDirty = true; return; }
+  if (!navigator.onLine) { setSyncState('offline'); return; } // safe locally; retried on next save/resume/boot
   pushBusy = true;
   setSyncState('busy');
   try {
     const j = await withAuthRetry(async () => {
-      const res = await fetch(GAS_URL, {
+      const res = await fetchWithTimeout(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ idToken: auth.idToken, data: JSON.stringify(appState) }),
-      });
+      }, 8000);
       return res.json();
     });
     setSyncState(j && j.ok ? 'ok' : 'err');
+    if (j && j.ok) setPendingSync(false);
   } catch (e) {
     setSyncState('err'); // offline or GAS unreachable — data is safe locally
   }
@@ -1389,10 +1411,13 @@ async function pushToSheets() {
 async function pullFromSheets() {
   // Local changes waiting to push win over a pull — let the push finish first
   if (pushBusy || pushDirty || syncTimer) return;
+  if (Date.now() - lastPullAt < 15000) return; // avoid re-pulling on rapid app-switching
+  if (!navigator.onLine) { setSyncState('offline'); return; }
+  lastPullAt = Date.now();
   setSyncState('busy');
   try {
     const j = await withAuthRetry(async () => {
-      const res = await fetch(GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken));
+      const res = await fetchWithTimeout(GAS_URL + '?id_token=' + encodeURIComponent(auth.idToken), null, 8000);
       return res.json();
     });
     // A local edit may have landed while the fetch was in flight — if so, don't
@@ -1413,8 +1438,8 @@ function setSyncState(s) {
   const dot = document.getElementById('sync-dot');
   const lbl = document.getElementById('sync-lbl');
   if (!dot) return;
-  dot.className = s==='ok'?'ok':s==='busy'?'busy':s==='err'?'err':'ok';
-  lbl.textContent = s==='ok'?'Synced':s==='busy'?'Syncing…':s==='err'?'Error':'Saved';
+  dot.className = s==='ok'?'ok':s==='busy'?'busy':(s==='err'||s==='offline')?'err':'ok';
+  lbl.textContent = s==='ok'?'Synced':s==='busy'?'Syncing…':s==='err'?'Error':s==='offline'?'Offline':'Saved';
 }
 
 // ── Outstanding calculation ────────────────────────────────────────────────
@@ -3338,11 +3363,20 @@ function cmpVer(a, b) {
 }
 async function fetchVersionInfo() {
   if (!UPDATE_URL.startsWith('https://')) return null;
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(LAST_VERSION_CHECK_KEY) || 'null'); } catch (e) {}
+  // Self-update relevance doesn't change minute to minute — skip the round
+  // trip if we checked recently, and fall back to the last known answer
+  // (rather than null) when offline so the mandatory-update gate still works.
+  if (cached && Date.now() - cached.at < VERSION_CHECK_THROTTLE_MS) return cached.info;
+  if (!navigator.onLine) return cached ? cached.info : null;
   try {
-    const r = await fetch(UPDATE_URL + '?t=' + Date.now(), { cache:'no-store' });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch (e) { return null; }
+    const r = await fetchWithTimeout(UPDATE_URL + '?t=' + Date.now(), { cache:'no-store' }, 8000);
+    if (!r.ok) return cached ? cached.info : null;
+    const info = await r.json();
+    try { localStorage.setItem(LAST_VERSION_CHECK_KEY, JSON.stringify({ at: Date.now(), info })); } catch (e) {}
+    return info;
+  } catch (e) { return cached ? cached.info : null; }
 }
 // Apply a newer web bundle (capgo) if version.json advertises one. Reloads on success.
 async function applyWebUpdate(info) {
@@ -3373,7 +3407,7 @@ function launchStatus(msg, pct) {
 function hideLaunch() {
   if (launchHidden) return; launchHidden = true;
   const el = document.getElementById('launch-overlay'); if (!el) return;
-  const wait = Math.max(0, 900 - (Date.now() - LAUNCH_T0)); // min on-screen time so it never flashes
+  const wait = Math.max(0, 200 - (Date.now() - LAUNCH_T0)); // min on-screen time so it never flashes
   setTimeout(() => { el.classList.add('hidden'); setTimeout(() => { el.style.display = 'none'; }, 500); }, wait);
 }
 async function nativeAppVersion() {
@@ -3494,18 +3528,26 @@ async function boot() {
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
   launchStatus('Loading…', 20);
 
+  // A push that failed right before the app last closed — retry it now,
+  // fire-and-forget, so it doesn't block reaching the ledger below.
+  if (IN_GAS && auth && auth.idToken && getPendingSync()) pushToSheets();
+
   // Confirm this bundle so capgo doesn't roll it back, then hand off the native splash.
   const Updater = getNativePlugin('CapacitorUpdater');
   if (Updater) { try { await Updater.notifyAppReady(); } catch (e) {} }
   const Splash = getNativePlugin('SplashScreen');
   if (Splash) { try { await Splash.hide(); } catch (e) {} }
 
+  // Start the version check now so its round trip overlaps with the
+  // biometric-auth wait below instead of stacking after it.
+  const versionInfoPromise = fetchVersionInfo();
+
   // Biometric/device-credential lock — blocks until unlocked (no-op outside native shell).
   await requireLock();
 
   // Fetch the update feed once; use it for both the native gate and the web update.
   launchStatus('Checking for updates…', 55);
-  const info = await fetchVersionInfo();
+  const info = await versionInfoPromise;
 
   // Mandatory native gate: installed APK too old for the current web bundle.
   if (info && info.minApk) {
@@ -3515,17 +3557,22 @@ async function boot() {
 
   // Seamless web bundle update (may reload the app) — run this BEFORE the
   // sign-in gate, so a signed-out/stuck-at-login device still always picks up
-  // the latest bundle instead of the update silently being skipped.
+  // the latest bundle instead of the update silently being skipped. Kept
+  // blocking (unlike the ledger data pull below) since it can replace and
+  // reload the running app — that must never happen as a surprise once the
+  // user is already looking at their ledger.
   await applyWebUpdate(info);
 
   // Not signed in → login screen.
   if (IN_GAS && !(auth && auth.idToken)) { hideLaunch(); showLogin(true); return; }
 
-  // Pull shared data from the sheet.
-  if (IN_GAS) { launchStatus('Syncing…', 80); await pullFromSheets(); }
-
+  // Everything that must block first paint is done — reveal the cached
+  // ledger now instead of waiting on the data pull too. The pull continues
+  // in the background; the header sync-dot reflects its progress, and it
+  // reconciles the view (re-renders) when it lands.
   launchStatus('Ready', 100);
   hideLaunch();
+  if (IN_GAS) pullFromSheets();
 }
 boot();
 
