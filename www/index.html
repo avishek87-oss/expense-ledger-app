@@ -411,6 +411,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .swipe-bg .pay{background:var(--green);height:100%;display:flex;align-items:center;padding:0 20px}
 #cc-pay-overlay{z-index:360} /* above the hamburger drawer (350) — CC screen lives inside it */
 #neha-xfer-overlay{z-index:360} /* same reason — Neha Bank screen also lives inside the drawer */
+#add-fixed-overlay{z-index:360} /* opened from a hamburger link, same reason as above */
 .neha-xfer-btns{display:flex;gap:8px;margin-top:10px}
 .neha-xfer-btns .add-btn{flex:1}
 .cc-pay-fields{display:flex;gap:8px;margin-bottom:12px}
@@ -435,8 +436,6 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
   } catch(e){}
 })();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 
@@ -548,6 +547,31 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
     </div>
     <button class="add-btn cc-pay-confirm" onclick="submitQuickAdd()">Add expense</button>
     <button class="pay-cancel" onclick="closeQuickAdd()">Cancel</button>
+  </div>
+</div>
+
+<div id="add-fixed-overlay" class="pay-overlay hidden" onclick="closeAddFixedItem()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title">Add fixed expense</div>
+    <input id="afi-label" class="misc-txt" style="width:100%;margin-bottom:10px" type="text" placeholder="e.g. Gardener">
+    <select id="afi-section" class="sel" style="width:100%;margin-bottom:10px">
+      <option value="household">Household</option>
+      <option value="neha">Neha</option>
+      <option value="aavia">Aavia</option>
+      <option value="avishek">Avishek</option>
+      <option value="maids">Maids</option>
+      <option value="fixed">Fixed</option>
+    </select>
+    <select id="afi-type" class="sel" style="width:100%;margin-bottom:6px" onchange="afiTypeChanged()">
+      <option value="flat">Flat monthly amount</option>
+      <option value="leaveProrated">Leave-prorated (like maids)</option>
+      <option value="attendance">Attendance-based (like Swimming)</option>
+      <option value="perClassDate">Per-class rate (like Chess)</option>
+    </select>
+    <div id="afi-type-hint" class="lrow-sub" style="margin-bottom:10px">Same amount every month until deleted.</div>
+    <input id="afi-amount" class="misc-amt" style="width:100%;margin-bottom:10px" type="number" inputmode="numeric" placeholder="amount">
+    <button class="add-btn cc-pay-confirm" onclick="submitAddFixedItem()">Add</button>
+    <button class="pay-cancel" onclick="closeAddFixedItem()">Cancel</button>
   </div>
 </div>
 
@@ -715,6 +739,15 @@ const PAY_METHODS = [
 const FIXED_METHOD = { rent:'avishekBank', sukanya:'nehaBank', carEmi:'avishekBank' };
 // Items that cannot use credit cards — picker shows only bank/cash options
 const NO_CC_KEYS = new Set(['nirmala','varsha','meenal','sujata','japaMaid','chess','skating','swimming','bharatnatyam']);
+// Display labels for every "fixed"-type ledger item (maids + aavia + fixed sections),
+// used to build real activity-log detail at payment time (no amount source exists there
+// other than what's passed through the "Mark paid" click, so labels alone are looked up here).
+const FIXED_LABELS = {
+  ...Object.fromEntries(MAIDS.map(m => [m.key, m.label])),
+  japaMaid:'Japa Maid', swimming:'Swimming', bharatnatyam:'Bharatnatyam', chess:'Chess', skating:'Skating',
+  sukanya:'Sukanya Samriddhi', carEmi:'Car EMI', rent:'Rent',
+  schoolFees:'P G Garodia School', bizone:'Bizone (snacks)', english:'English (Sheetal)',
+};
 
 // Credit-card billing cycles. cycle runs [startDay .. endDay(next month)];
 // the statement closes on endDay and the bill is due on dueDay of the month after.
@@ -800,7 +833,9 @@ function emptyMonth() {
     paid:{},
     payMethod:{},
     payDate:{},
-    bases:{}
+    bases:{},
+    customAttended:{},
+    customClassDates:{}
   };
 }
 // Soft-delete trash (top-level, cross-month). Rides in the synced blob;
@@ -844,6 +879,7 @@ async function loadActivityLog() {
   activityLoading = false;
   renderMenu();
 }
+const ACTIVITY_NAMES = { 'avishek87@gmail.com': 'Avishek', 'nagrawal0988@gmail.com': 'Neha' };
 function activitySectionHtml() {
   if (activityLoading) {
     return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div><div class="cc-empty" style="padding-top:0">Loading…</div></section>`;
@@ -853,7 +889,7 @@ function activitySectionHtml() {
       <div class="cc-empty" style="padding-top:0">Nothing here yet — changes you and Neha make will show up here.</div></section>`;
   }
   const rows = activityEntries.map(e =>
-    `<div class="cc-pay"><span>${esc(e.email)} · ${esc(e.entry)} · ${fmtDMY(new Date(e.ts))}</span></div>`
+    `<div class="cc-pay"><span>${esc(ACTIVITY_NAMES[e.email] || e.email)} · ${esc(e.entry)} · ${fmtDMY(new Date(e.ts))}</span></div>`
   ).join('');
   return `<section class="cc-card"><div class="cc-head"><span class="cc-name">Activity</span></div>
     <div class="cc-empty" style="padding-top:0;font-size:13px">Last ${activityEntries.length} changes.</div>${rows}</section>`;
@@ -871,6 +907,8 @@ function restoreFromTrash(id) {
   } else if (entry.kind === 'ccPayment') {
     const cur = getCcPayments();
     saveCcPayments({ ...cur, [entry.cardKey]: [...cur[entry.cardKey], entry.item] });
+  } else if (entry.kind === 'fixedItem') {
+    restoreDiscontinuedItem(entry.key);
   }
   renderMenu();
 }
@@ -951,14 +989,14 @@ function updateMonth(patch, logMsg) {
   if (IN_GAS) scheduleSync();
   logActivity(logMsg || ('edited ' + monthLabel(currentMonth) + ' ledger'));
 }
-function updateMonthFor(mk, patch, logMsg) {
+function updateMonthFor(mk, patch, logMsg, silent) {
   pushUndo('Ledger change · ' + monthLabel(mk));
   const next = { ...getMDFor(mk), ...patch };
   appState = { ...appState, months: { ...appState.months, [mk]: next } };
   saveLocal();
   render();
   if (IN_GAS) scheduleSync();
-  logActivity(logMsg || ('edited ' + monthLabel(mk) + ' ledger'));
+  if (!silent) logActivity(logMsg || ('edited ' + monthLabel(mk) + ' ledger'));
 }
 
 // ── Storage ────────────────────────────────────────────────────────────────
@@ -1058,6 +1096,113 @@ function effectiveBase(mk, key, defaultVal) {
   return defaultVal;
 }
 
+// ── Fixed-item lifecycle: add/delete a fixed expense without rewriting history ──
+// discontinuedFrom[key] is the LAST ACTIVE month (closed interval), not the first
+// excluded one — so the month a delete happens in is itself always left untouched,
+// and only strictly-later months change. This keeps collectPaidItems (which shows
+// already-paid history and is deliberately never guarded by this check) consistent
+// with the section totals for the same month.
+function isDiscontinued(key, mk) {
+  const cutoff = (appState.discontinuedFrom||{})[key];
+  return !!cutoff && mk > cutoff;
+}
+function fixedLabel(key) {
+  return FIXED_LABELS[key] || ((appState.customFixedItems||{})[key]||{}).label || key;
+}
+// Custom fixed items are user-added recurring expenses (appState.customFixedItems),
+// additive alongside the hardcoded ones — not a replacement for them. `type` picks
+// which existing calculation pattern to reuse (flat/rent-like, leaveProrated/maid-like,
+// attendance/swimming-like, perClassDate/chess-like); startMonth is always the ledger
+// month it was created in, never backdatable.
+function customItemAmount(mk, key, item) {
+  if (mk < item.startMonth) return 0;
+  const md = getMDFor(mk), dim = daysInMonth(mk);
+  if (item.type === 'flat')         return effectiveBase(mk, key, item.amount);
+  if (item.type === 'leaveProrated') return maidPayout(effectiveBase(mk, key, item.amount), md.maidLeaves[key] ?? 0, dim);
+  if (item.type === 'attendance')    return (md.customAttended||{})[key] ? effectiveBase(mk, key, item.amount) : 0;
+  if (item.type === 'perClassDate')  return ((md.customClassDates||{})[key]||[]).length * effectiveBase(mk, key+'Rate', item.rate);
+  return 0;
+}
+function activeCustomItems(mk, section) {
+  const items = appState.customFixedItems || {};
+  return Object.keys(items)
+    .filter(k => items[k].section === section && mk >= items[k].startMonth && !isDiscontinued(k, mk))
+    .map(k => ({ key:k, ...items[k] }));
+}
+function customSectionTotal(mk, section) {
+  return activeCustomItems(mk, section).reduce((s,it) => s + customItemAmount(mk, it.key, it), 0);
+}
+function customSectionPaid(mk, section) {
+  const md = getMDFor(mk);
+  return activeCustomItems(mk, section).reduce((s,it) => s + (md.paid[it.key] ? customItemAmount(mk, it.key, it) : 0), 0);
+}
+
+// ── Delete/discontinue a fixed item (built-in or custom) ────────────────────
+// Reuses the existing trash/restore pattern so this behaves like every other
+// delete in the app — "Recently Deleted" gets a Restore button, nothing new
+// to learn. See isDiscontinued() above for why the cutoff month itself is left
+// untouched (closed interval, not "first excluded month").
+function saveDiscontinued(next, logMsg) {
+  pushUndo('Fixed item change');
+  appState = { ...appState, discontinuedFrom: next };
+  saveLocal(); render(); if (IN_GAS) scheduleSync();
+  logActivity(logMsg || 'updated fixed items');
+}
+function discontinueFixedItem(key, label) {
+  if (!confirm(`Stop tracking "${label}" from next month onward? ${monthLabel(currentMonth)} itself is unaffected.`)) return;
+  moveToTrash({ kind:'fixedItem', key, item:{ label, cutoffMonth: currentMonth } });
+  saveDiscontinued({ ...(appState.discontinuedFrom||{}), [key]: currentMonth },
+    `stopped tracking ${label} after ${monthLabel(currentMonth)}`);
+}
+function restoreDiscontinuedItem(key) {
+  const next = { ...(appState.discontinuedFrom||{}) };
+  delete next[key];
+  saveDiscontinued(next, `restored ${fixedLabel(key)} to the ledger`);
+}
+
+// ── Add a new custom fixed item ─────────────────────────────────────────────
+function saveCustomFixedItems(next, logMsg) {
+  pushUndo('Fixed item change');
+  appState = { ...appState, customFixedItems: next };
+  saveLocal(); render(); if (IN_GAS) scheduleSync();
+  logActivity(logMsg || 'added a fixed item');
+}
+function openAddFixedItem() {
+  const overlay = document.getElementById('add-fixed-overlay');
+  overlay.classList.remove('hidden');
+  document.getElementById('afi-label').value = '';
+  document.getElementById('afi-amount').value = '';
+  document.getElementById('afi-section').value = 'household';
+  document.getElementById('afi-type').value = 'flat';
+  afiTypeChanged();
+  attachOverlayBackHandler('add-fixed-overlay', closeAddFixedItem);
+}
+function closeAddFixedItem() { document.getElementById('add-fixed-overlay').classList.add('hidden'); }
+function afiTypeChanged() {
+  const type = document.getElementById('afi-type').value;
+  const hints = {
+    flat: 'Same amount every month until deleted.',
+    leaveProrated: 'Prorated by leave days taken, like the maids.',
+    attendance: 'Only charged in months marked as attended, like Swimming.',
+    perClassDate: 'Amount is per-class rate × classes attended, like Chess.',
+  };
+  document.getElementById('afi-type-hint').textContent = hints[type] || '';
+  document.getElementById('afi-amount').placeholder = type === 'perClassDate' ? 'rate per class' : 'amount';
+}
+function submitAddFixedItem() {
+  const label = (document.getElementById('afi-label').value || '').trim();
+  const section = document.getElementById('afi-section').value;
+  const type = document.getElementById('afi-type').value;
+  const amount = Math.round(Number(document.getElementById('afi-amount').value) || 0);
+  if (!label || !(amount > 0)) { alert('Label and amount are required'); return; }
+  const key = 'custom_' + Date.now().toString(36);
+  const item = { label, section, type, startMonth: currentMonth };
+  if (type === 'perClassDate') item.rate = amount; else item.amount = amount;
+  saveCustomFixedItems({ ...(appState.customFixedItems||{}), [key]: item },
+    `added fixed expense: ${label} (${type})`);
+  closeAddFixedItem();
+}
+
 // ── School fee functions ───────────────────────────────────────────────────
 function schoolMonthlyRate(mk) {
   return effectiveBase(mk, 'schoolRate', 10357);
@@ -1112,9 +1257,16 @@ function applyTabChrome() {
   const fab = document.getElementById('fab');
   if (fab) fab.classList.toggle('hidden', currentTab!=='ledger'); // quick-add only on the Ledger tab
 }
+// Month-nav browsing window: never show months beyond the current one, and only
+// go back 3 months from today (independent of MIN_MONTH, which is the app's fixed
+// data-history floor used elsewhere for scanning stored base-rate overrides, etc).
+function navMinMonth() {
+  const floor = addMonths(todayMonthKey(), -3);
+  return floor > MIN_MONTH ? floor : MIN_MONTH;
+}
 function shiftMonth(d) {
   const next = addMonths(currentMonth, d);
-  if (next < MIN_MONTH) return;
+  if (next < navMinMonth() || next > todayMonthKey()) return;
   currentMonth = next;
   gDraft = { vendor:'Sagar', category:'veges', amount:'' };
   miscDrafts = {};
@@ -1133,7 +1285,7 @@ function togglePaid(key) {
   const md = getMD();
   const pm = { ...(md.payMethod||{}) };
   delete pm[key];
-  updateMonth({ paid:{ ...md.paid, [key]: false }, payMethod: pm });
+  updateMonth({ paid:{ ...md.paid, [key]: false }, payMethod: pm }, `unmarked ${fixedLabel(key)} as paid`);
 }
 
 // ── Maid leaves ────────────────────────────────────────────────────────────
@@ -1142,31 +1294,50 @@ function togglePaid(key) {
 function maidLeafStep(maidKey) { return maidKey === 'nirmala' ? 0.5 : 1; }
 function changeLeaves(maidKey, delta) {
   const md = getMD();
-  const cur = md.maidLeaves[maidKey] ?? 2;
+  // ?? 0 (not 2) — the 4 built-in maids always have maidLeaves pre-seeded by emptyMonth()
+  // so this fallback is never actually hit for them; it only matters for a brand-new
+  // custom leave-prorated item, which should start at 0 leaves, matching customItemAmount.
+  const cur = md.maidLeaves[maidKey] ?? 0;
   const next = Math.max(0, Math.min(31, Math.round((cur + delta) * 2) / 2)); // snap to 0.5
-  updateMonth({ maidLeaves:{ ...md.maidLeaves, [maidKey]: next } });
+  updateMonth({ maidLeaves:{ ...md.maidLeaves, [maidKey]: next } }, `set ${fixedLabel(maidKey)} leaves to ${next}`);
 }
 function changeJapaDays(delta) {
   const md = getMD();
   const dim = daysInMonth(currentMonth);
   const cur = md.japaDaysPresent ?? defaultJapaDays(currentMonth);
-  updateMonth({ japaDaysPresent: Math.max(0, Math.min(dim, cur+delta)) });
+  const nextJapaDays = Math.max(0, Math.min(dim, cur+delta));
+  updateMonth({ japaDaysPresent: nextJapaDays }, `set japa maid days to ${nextJapaDays}`);
 }
 
 // ── Checkboxes ─────────────────────────────────────────────────────────────
-function toggleSwimming()     { const md=getMD(); updateMonth({ swimmingAttended: !md.swimmingAttended }); }
-function toggleBharatnatyam() { const md=getMD(); updateMonth({ bharatnatyamAttended: !md.bharatnatyamAttended }); }
+function toggleSwimming()     { const md=getMD(); updateMonth({ swimmingAttended: !md.swimmingAttended }, `swimming attended: ${!md.swimmingAttended}`); }
+function toggleBharatnatyam() { const md=getMD(); updateMonth({ bharatnatyamAttended: !md.bharatnatyamAttended }, `bharatnatyam attended: ${!md.bharatnatyamAttended}`); }
 
 // ── Date chips ─────────────────────────────────────────────────────────────
 function toggleChessDate(day) {
   const md = getMD();
   const dates = md.chessDates || [];
-  updateMonth({ chessDates: dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b) });
+  updateMonth({ chessDates: dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b) }, `toggled chess class date ${day}`);
 }
 function toggleSkatingDate(day) {
   const md = getMD();
   const dates = md.skatingDates || [];
-  updateMonth({ skatingDates: dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b) });
+  updateMonth({ skatingDates: dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b) }, `toggled skating class date ${day}`);
+}
+// Generic versions of the toggles above, for user-added custom fixed items (type
+// 'attendance' / 'perClassDate') — the built-in swimming/bharatnatyam/chess/skating
+// toggles stay as their own one-liners rather than being rewritten to call these,
+// to avoid touching working code that isn't part of this change.
+function toggleCustomAttended(key) {
+  const md = getMD();
+  const next = !(md.customAttended||{})[key];
+  updateMonth({ customAttended: { ...(md.customAttended||{}), [key]: next } }, `${fixedLabel(key)} attended: ${next}`);
+}
+function toggleCustomClassDate(key, day) {
+  const md = getMD();
+  const dates = (md.customClassDates||{})[key] || [];
+  const nextDates = dates.includes(day) ? dates.filter(d=>d!==day) : [...dates,day].sort((a,b)=>a-b);
+  updateMonth({ customClassDates: { ...(md.customClassDates||{}), [key]: nextDates } }, `toggled ${fixedLabel(key)} class date ${day}`);
 }
 
 // ── Grocery ────────────────────────────────────────────────────────────────
@@ -1195,7 +1366,9 @@ function toggleGroceryPaid(i) {
   // Only called to UNMARK; marking goes through startPayment
   captureGroceryDraft();
   const md = getMD();
-  updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) });
+  const item = (md.groceries||[])[i];
+  updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
+    item && `unmarked ₹${item.amount} groceries (${item.vendor}) as paid`);
 }
 function deleteGrocery(i) {
   captureGroceryDraft();
@@ -1250,7 +1423,9 @@ function toggleMiscPaid(cat,i) {
   // Only called to UNMARK; marking goes through startPayment
   captureMiscDraft(cat);
   const md = getMD();
-  updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) });
+  const item = (md[cat]||[])[i];
+  updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
+    item && `unmarked ₹${item.amount} ${cat} (${item.text}) as paid`);
 }
 function deleteMiscItem(cat,i) {
   captureMiscDraft(cat);
@@ -1453,6 +1628,7 @@ function getOutstandingItems() {
       const dim = daysInMonth(mk);
       const due = [];
       const chk = (label, amount, paidKey, sub) => {
+        if (isDiscontinued(paidKey, mk)) return;
         if (amount > 0 && !md.paid[paidKey])
           due.push({ label, sub:sub||'', amount, toggleType:'fixed', toggleKey:paidKey, toggleIdx:-1 });
       };
@@ -1495,6 +1671,10 @@ function getOutstandingItems() {
       const rentBase = effectiveBase(mk, 'rent', rentFee(mk));
       chk('Rent', rentBase, 'rent', `₹${inr(rentBase)}/mo`);
 
+      ['maids','aavia','fixed','household','neha','avishek'].forEach(section => {
+        activeCustomItems(mk, section).forEach(it => chk(it.label, customItemAmount(mk, it.key, it), it.key, 'custom'));
+      });
+
       (md.groceries||[]).forEach((g,i) => { if (!g.paid) due.push({ label:`${g.vendor} (${g.category})`, sub:g.date||'', amount:g.amount, toggleType:'item', toggleKey:'groceries', toggleIdx:i }); });
       (md.householdGroceries||[]).forEach((it,i) => { if (!it.paid) due.push({ label:'HH Groceries — '+it.text, sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'householdGroceries', toggleIdx:i }); });
       (md.householdMisc||[]).forEach((it,i)      => { if (!it.paid) due.push({ label:'HH Misc — '+it.text,      sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'householdMisc',      toggleIdx:i }); });
@@ -1509,9 +1689,9 @@ function getOutstandingItems() {
 }
 
 // ── Toggle outstanding item paid ───────────────────────────────────────────
-function toggleOutItem(mk, type, key, idx) {
+function toggleOutItem(mk, type, key, idx, amount) {
   if (type === 'fixed') {
-    startPayment('outFixed', mk, key);
+    startPayment('outFixed', mk, key, amount);
   } else {
     startPayment('outItem', mk, key, idx);
   }
@@ -1547,7 +1727,7 @@ function saveBase(key) {
   baseEditKey = null;
   if (val > 0) {
     const md = getMD();
-    updateMonth({ bases: { ...(md.bases||{}), [key]: val } });
+    updateMonth({ bases: { ...(md.bases||{}), [key]: val } }, `set ${fixedLabel(key)} base to ₹${val}`);
   } else { render(); }
 }
 function baseEditControl(key, currentBase, label) {
@@ -1625,28 +1805,38 @@ function confirmPay(method) {
   doHaptic();
   document.getElementById('pay-overlay').classList.add('hidden');
 
+  const methodLabel = PAY_METHODS.find(m=>m.key===method)?.label || method;
+
   if (type === 'fixed') {
-    const [key] = args;
+    const [key, amt] = args;
     const md = getMD();
-    updateMonth({ paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method}, payDate:{...(md.payDate||{}),[key]:today()} });
+    updateMonth({ paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method}, payDate:{...(md.payDate||{}),[key]:today()} },
+      `paid ₹${amt} ${fixedLabel(key)} via ${methodLabel}`);
   } else if (type === 'misc') {
     const [cat, idx] = args;
     captureMiscDraft(cat);
     const md = getMD();
-    updateMonth({ [cat]:(md[cat]||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) });
+    const item = (md[cat]||[])[idx];
+    updateMonth({ [cat]:(md[cat]||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
+      item && `paid ₹${item.amount} ${cat} (${item.text}) via ${methodLabel}`);
   } else if (type === 'grocery') {
     const [idx] = args;
     captureGroceryDraft();
     const md = getMD();
-    updateMonth({ groceries:(md.groceries||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) });
+    const item = (md.groceries||[])[idx];
+    updateMonth({ groceries:(md.groceries||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
+      item && `paid ₹${item.amount} groceries (${item.vendor}) via ${methodLabel}`);
   } else if (type === 'outFixed') {
-    const [mk, key] = args;
+    const [mk, key, amt] = args;
     const md = getMDFor(mk);
-    updateMonthFor(mk, { paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method}, payDate:{...(md.payDate||{}),[key]:today()} });
+    updateMonthFor(mk, { paid:{...md.paid,[key]:true}, payMethod:{...(md.payMethod||{}),[key]:method}, payDate:{...(md.payDate||{}),[key]:today()} },
+      `paid ₹${amt} ${fixedLabel(key)} via ${methodLabel} (${monthLabel(mk)})`);
   } else if (type === 'outItem') {
     const [mk, cat, idx] = args;
     const md = getMDFor(mk);
-    updateMonthFor(mk, { [cat]:(md[cat]||[]).map((it,i)=>i===idx?{...it,paid:true,payMethod:method}:it) });
+    const item = (md[cat]||[])[idx];
+    updateMonthFor(mk, { [cat]:(md[cat]||[]).map((it,i)=>i===idx?{...it,paid:true,payMethod:method}:it) },
+      item && `paid ₹${item.amount} ${cat} (${item.text||item.vendor}) via ${methodLabel} (${monthLabel(mk)})`);
   } else if (type === 'batch') {
     const [keys] = args;
     const byMonth = {};
@@ -1674,10 +1864,11 @@ function confirmPay(method) {
         const idxSet = arrIdx[cat];
         patch[cat] = (md[cat]||[]).map((it,i) => idxSet.has(i) ? {...it, paid:true, payMethod:method} : it);
       });
-      updateMonthFor(mk, patch);
+      updateMonthFor(mk, patch, null, true);
     });
     suppressUndo = false;
     selectedOutKeys.clear();
+    logActivity(`paid ${keys.length} items via ${methodLabel}`);
   }
 }
 function cancelPay() {
@@ -1764,6 +1955,13 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   const txns = [];
   const fixedAmt = { schoolFees:mk=>schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk), bizone:mk=>bizoneFee(mk), english:mk=>englishFee(mk) };
   const fixedLabels = { schoolFees:'School Fees', bizone:'Bizone Fee', english:'English Classes' };
+  // Merge in any custom fixed items so ones paid via credit card show up here too —
+  // paid-history is intentionally never re-checked against a later discontinuation
+  // (same reasoning as collectPaidItems: already-paid months stay true forever).
+  Object.entries(appState.customFixedItems||{}).forEach(([key, item]) => {
+    fixedAmt[key] = mk => customItemAmount(mk, key, item);
+    fixedLabels[key] = item.label;
+  });
   // Collect array-based transactions (editable)
   Object.keys(appState.months||{}).forEach(mk => {
     const md = getMDFor(mk);
@@ -1845,7 +2043,8 @@ function saveCycleEdit() {
     const mk = clampMonth(monthKeyOf(newDate));
     const newItem = { date: newDate, text: newDesc, amount: newAmount, paid: true, payMethod: pendingCycleEdit.cardKey };
     const md = getMDFor(mk);
-    updateMonthFor(mk, { [newCat]: [...(md[newCat]||[]), newItem] });
+    updateMonthFor(mk, { [newCat]: [...(md[newCat]||[]), newItem] },
+      `added ₹${newAmount} ${newDesc} (${newCat}) via CC cycle`);
   } else {
     const { mk, cat, i, cardKey } = pendingCycleEdit;
     const tmd = getMDFor(mk);
@@ -1854,16 +2053,17 @@ function saveCycleEdit() {
     const patch = { ...it, date: newDate, text: newDesc, amount: newAmount, paid: true, payMethod: cardKey };
     const newMkForDate = clampMonth(monthKeyOf(newDate));
     const updates = {};
+    const editMsg = `edited CC cycle transaction: ${newDesc} · ₹${newAmount}`;
     if (newCat === cat && newMkForDate === mk) {
       updates[cat] = (tmd[cat]||[]).map((x, idx) => idx === i ? patch : x);
-      updateMonthFor(mk, updates);
+      updateMonthFor(mk, updates, editMsg);
     } else {
       updates[cat] = (tmd[cat]||[]).filter((_, idx) => idx !== i);
-      updateMonthFor(mk, updates);
+      updateMonthFor(mk, updates, editMsg);
       const newMd = getMDFor(newMkForDate);
       const newUpdates = {};
       newUpdates[newCat] = [...(newMd[newCat]||[]), patch];
-      updateMonthFor(newMkForDate, newUpdates);
+      updateMonthFor(newMkForDate, newUpdates, editMsg, true);
     }
   }
   cancelCycleEdit();
@@ -1877,7 +2077,8 @@ function deleteCycleTransaction(mk, cat, i) {
   const tmd = getMDFor(mk);
   const item = (tmd[cat]||[])[i];
   if (item) moveToTrash({ kind:'month', mk, cat, item });
-  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).filter((_,idx) => idx!==i) }, 'deleted a CC cycle transaction');
+  updateMonthFor(mk, { [cat]: (tmd[cat]||[]).filter((_,idx) => idx!==i) },
+    item ? `deleted ₹${item.amount} ${item.text||item.vendor} (${cat})` : 'deleted a CC cycle transaction');
   // Re-render cycle review
   if (pendingCycleReview) {
     const html = ccCycleTransactionsHtml(pendingCycleReview.cardKey, pendingCycleReview.cycleKey, pendingCycleReview.label, pendingCycleReview.total);
@@ -1963,6 +2164,9 @@ function ccChargesFor(cardKey) {
     bizone:     mk => bizoneFee(mk),
     english:    mk => englishFee(mk),
   };
+  Object.entries(appState.customFixedItems||{}).forEach(([key, item]) => {
+    fixedAmt[key] = mk => customItemAmount(mk, key, item);
+  });
   Object.keys(appState.months||{}).forEach(mk => {
     const md = getMDFor(mk);
     arrays.forEach(cat => (md[cat]||[]).forEach(it => {
@@ -2037,19 +2241,26 @@ function deleteCcPayment(cardKey, idx) {
 // ── Monthly category totals ────────────────────────────────────────────────
 function monthCategoryTotals(mk) {
   const md = getMDFor(mk), dim = daysInMonth(mk);
-  let maids = MAIDS.reduce((s,m) => s + maidPayout(effectiveBase(mk,m.key,m.base), md.maidLeaves[m.key]??2, dim), 0);
-  if (mk >= '2026-08' && mk <= '2026-10') maids += japaMaidPayout(mk, md.japaDaysPresent);
-  const aavia = schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk) + bizoneFee(mk)
-    + (md.swimmingAttended ? effectiveBase(mk,'swimming',4000) : 0)
-    + (md.bharatnatyamAttended ? effectiveBase(mk,'bharatnatyam',1500) : 0)
-    + (md.chessDates||[]).length * effectiveBase(mk,'chessRate',500)
-    + (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375)
-    + englishFee(mk)
-    + (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-  const fixed = SUKANYA + carEmiFee(mk) + effectiveBase(mk,'rent',rentFee(mk));
+  let maids = MAIDS.reduce((s,m) => s + (isDiscontinued(m.key,mk) ? 0 : maidPayout(effectiveBase(mk,m.key,m.base), md.maidLeaves[m.key]??2, dim)), 0);
+  if (mk >= '2026-08' && mk <= '2026-10' && !isDiscontinued('japaMaid',mk)) maids += japaMaidPayout(mk, md.japaDaysPresent);
+  maids += customSectionTotal(mk, 'maids');
+  const aavia = (isDiscontinued('schoolFees',mk) ? 0 : schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk))
+    + (isDiscontinued('bizone',mk) ? 0 : bizoneFee(mk))
+    + (!isDiscontinued('swimming',mk) && md.swimmingAttended ? effectiveBase(mk,'swimming',4000) : 0)
+    + (!isDiscontinued('bharatnatyam',mk) && md.bharatnatyamAttended ? effectiveBase(mk,'bharatnatyam',1500) : 0)
+    + (isDiscontinued('chess',mk) ? 0 : (md.chessDates||[]).length * effectiveBase(mk,'chessRate',500))
+    + (isDiscontinued('skating',mk) ? 0 : (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375))
+    + (isDiscontinued('english',mk) ? 0 : englishFee(mk))
+    + (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0)
+    + customSectionTotal(mk, 'aavia');
+  const fixed = (isDiscontinued('sukanya',mk) ? 0 : SUKANYA)
+    + (isDiscontinued('carEmi',mk) ? 0 : carEmiFee(mk))
+    + (isDiscontinued('rent',mk) ? 0 : effectiveBase(mk,'rent',rentFee(mk)))
+    + customSectionTotal(mk, 'fixed');
   const sum = arr => (arr||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-  const household = sum(md.groceries) + sum(md.householdGroceries) + sum(md.householdMisc);
-  const neha = sum(md.nehaMisc), avishek = sum(md.avishekMisc);
+  const household = sum(md.groceries) + sum(md.householdGroceries) + sum(md.householdMisc) + customSectionTotal(mk, 'household');
+  const neha = sum(md.nehaMisc) + customSectionTotal(mk, 'neha');
+  const avishek = sum(md.avishekMisc) + customSectionTotal(mk, 'avishek');
   return { maids, aavia, fixed, household, neha, avishek, total: maids+aavia+fixed+household+neha+avishek };
 }
 
@@ -2137,12 +2348,43 @@ function submitQuickAdd() {
     if (!text) return;
     entry = { text, amount: Math.round(amt), date, paid:false };
   }
-  updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), entry] });
+  updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), entry] },
+    `added ₹${entry.amount} ${bucket} (${entry.vendor||entry.text})`);
   closeQuickAdd();
 }
 
 // ── Search (all transactions, all months) ──────────────────────────────────
-const SEARCH_CATS = { groceries:'Groceries', householdGroceries:'HH Groceries', householdMisc:'HH Misc', aaviaMisc:'Aavia', nehaMisc:'Neha', avishekMisc:'Avishek' };
+const SEARCH_CATS = { groceries:'Groceries', householdGroceries:'HH Groceries', householdMisc:'HH Misc', aaviaMisc:'Aavia', nehaMisc:'Neha', avishekMisc:'Avishek', fixed:'Fixed' };
+// Synthetic search entries for "fixed" ledger items (rent, maids, sukanya, etc.) —
+// these aren't stored as discrete array items like groceries/misc, so this mirrors
+// getOutstandingItems()'s per-item amount math but includes paid items too (search
+// should surface a fixed item regardless of paid status, not just when it's due).
+function fixedSearchEntries(mk) {
+  if (!appState.months[mk]) return [];
+  const md = getMDFor(mk);
+  const dim = daysInMonth(mk);
+  const out = [];
+  const chk = (key, amount) => {
+    if (isDiscontinued(key, mk)) return;
+    if (amount > 0) out.push({ mk, cat:'fixed', i:-1, text: fixedLabel(key), amount, paid: !!md.paid[key] });
+  };
+  MAIDS.forEach(m => chk(m.key, maidPayout(effectiveBase(mk, m.key, m.base), md.maidLeaves[m.key] ?? 2, dim)));
+  if (mk>='2026-08' && mk<='2026-10') chk('japaMaid', (28000/dim) * (md.japaDaysPresent ?? defaultJapaDays(mk)));
+  chk('schoolFees', schoolTuition(mk) + schoolTermFee(mk) + schoolBusFee(mk));
+  chk('bizone', bizoneFee(mk));
+  chk('english', englishFee(mk));
+  if (md.swimmingAttended)     chk('swimming',     effectiveBase(mk,'swimming',4000));
+  if (md.bharatnatyamAttended) chk('bharatnatyam', effectiveBase(mk,'bharatnatyam',1500));
+  chk('chess',   (md.chessDates||[]).length   * effectiveBase(mk,'chessRate',500));
+  chk('skating', (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375));
+  chk('sukanya', SUKANYA);
+  chk('carEmi',  carEmiFee(mk));
+  chk('rent',    effectiveBase(mk,'rent', rentFee(mk)));
+  ['maids','aavia','fixed','household','neha','avishek'].forEach(section => {
+    activeCustomItems(mk, section).forEach(it => chk(it.key, customItemAmount(mk, it.key, it)));
+  });
+  return out;
+}
 function openSearch() {
   const overlay = document.getElementById('search-overlay');
   overlay.classList.remove('hidden');
@@ -2155,8 +2397,9 @@ function closeSearch() { document.getElementById('search-overlay').classList.add
 function searchIndex() {
   return Object.keys(appState.months||{}).flatMap(mk => {
     const md = getMDFor(mk);
-    return Object.keys(SEARCH_CATS).flatMap(cat =>
+    const arrayHits = Object.keys(SEARCH_CATS).flatMap(cat =>
       (md[cat]||[]).map((it,i) => ({ mk, cat, i, ...it })));
+    return [...arrayHits, ...fixedSearchEntries(mk)];
   });
 }
 function renderSearch() {
@@ -2164,7 +2407,7 @@ function renderSearch() {
   const box = document.getElementById('search-results');
   if (!q) { box.innerHTML = `<div class="sr-empty">Type to search across all months.</div>`; return; }
   const hits = searchIndex().filter(it => {
-    const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + ' ' + (it.amount||'')).toLowerCase();
+    const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + (it.cat==='fixed' ? '' : ' ' + (it.amount||''))).toLowerCase();
     return hay.includes(q);
   }).sort((a,b) => (a.mk < b.mk ? 1 : -1)); // newest month first
   if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches for “${esc(q)}”.</div>`; return; }
@@ -2259,11 +2502,6 @@ function renderMenu() {
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + trendsSectionHtml();
     return;
   }
-  if (menuView === 'statement') {
-    if (titleEl) titleEl.textContent = (CC_CYCLES[stmtCardKey]?.label || '') + ' Statement';
-    el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('cc')">← Back</button>` + statementUploadHtml();
-    return;
-  }
   if (menuView === 'trash') {
     if (titleEl) titleEl.textContent = 'Recently Deleted';
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + trashSectionHtml();
@@ -2280,6 +2518,7 @@ function renderMenu() {
     <a class="menu-link" onclick="setMenuView('budgets')">Budgets <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
     <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
+    <a class="menu-link" onclick="openAddFixedItem()">Add Fixed Expense <span>›</span></a>
     <a class="menu-link" onclick="openTrashView()">Recently Deleted <span>›</span></a>
     <a class="menu-link" onclick="openActivityView()">Activity <span>›</span></a>
     <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
@@ -2295,6 +2534,9 @@ function trashSectionHtml() {
       <div class="cc-empty" style="padding-top:0">Nothing here — deleted items are kept for 7 days.</div></section>`;
   }
   const rows = trash.slice().reverse().map(t => {
+    if (t.kind === 'fixedItem') {
+      return `<div class="cc-pay"><span>${esc(t.item.label)} · stopped after ${monthLabel(t.item.cutoffMonth)} · deleted ${fmtDMY(new Date(t.deletedAt))}</span><button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="restoreFromTrash('${t.id}')">Restore</button></div>`;
+    }
     const label = t.item.text || t.item.vendor
       || (t.kind==='nehaTransfer' ? (t.item.direction==='in'?'Avishek → Neha':'Neha → Avishek') : 'CC payment');
     return `<div class="cc-pay"><span>₹${inr(t.item.amount)} · ${esc(label)} · deleted ${fmtDMY(new Date(t.deletedAt))}</span><button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="restoreFromTrash('${t.id}')">Restore</button></div>`;
@@ -2324,8 +2566,7 @@ function ccSectionHtml() {
       <div class="cc-head">
         <span class="cc-name">${cfg.label}</span>
         <span class="cc-out ${b.outstanding>0?'due':'ok'}">₹${inr(Math.max(0,b.outstanding))} <small>owed</small></span>
-      </div>
-      <button class="add-btn" style="width:100%;margin:8px 0" onclick="openStatementUpload('${cardKey}')">Upload Statement</button>`;
+      </div>`;
     // Hide fully-paid cycles — once a month's bill is settled it drops off the list.
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');
     html += visible.length
@@ -2523,149 +2764,6 @@ function donutSvg(t) {
     <div class="donut-legend">${legend}</div>
   </div>`;
 }
-// ── CC Statement Upload + Reconciliation ──────────────────────────────────
-let stmtParsed = null; // holds {transactions: [...], matched: [...], unmatched: [...], mismatch: {...}|null}
-let stmtCardKey = null; // which CC card the current upload session is for
-function openStatementUpload(cardKey) { stmtCardKey = cardKey; stmtParsed = null; setMenuView('statement'); }
-function extractStatementTotal(text) {
-  const m = text.match(/Total\s*(?:Amount\s*)?Due[:\s]*₹?\s*([\d,]+\.?\d*)/i);
-  return m ? Number(m[1].replace(/,/g, '')) : null;
-}
-function extractStatementPeriod(text) {
-  const m = text.match(/Statement\s*Period[:\s]*?(\d{2}\/\d{2}\/\d{4})\D+(\d{2}\/\d{2}\/\d{4})/i);
-  if (!m) return null;
-  const toIso = s => { const [d,mo,y] = s.split('/'); return `${y}-${mo}-${d}`; };
-  return { start: toIso(m[1]), end: toIso(m[2]) };
-}
-async function parseStatement(file, password, cardKey) {
-  try {
-    if (!window.pdfjsLib) { alert('PDF library not loaded. Refresh and try again.'); return null; }
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer, password }).promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(t => t.str).join(' ') + '\n';
-    }
-    // Generic statement format assumed for all cards for now: "DD/MM/YYYY  Description  ₹Amount".
-    // cardKey is accepted so this can be branched per-card later if a real statement layout differs.
-    const lines = text.split('\n');
-    const txns = [];
-    const dateRegex = /(\d{2})\/(\d{2})\/(\d{4})/;
-    const amountRegex = /₹?([\d,]+)\.?\d{0,2}$/;
-    lines.forEach(line => {
-      const dateMatch = line.match(dateRegex);
-      if (!dateMatch) return;
-      const [, day, month, year] = dateMatch;
-      const date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-      const afterDate = line.substring(dateMatch.index + dateMatch[0].length).trim();
-      const amountMatch = afterDate.match(amountRegex);
-      if (!amountMatch) return;
-      const amount = Number(amountMatch[1].replace(/,/g, ''));
-      const desc = afterDate.substring(0, amountMatch.index).trim();
-      if (desc && amount > 0) txns.push({ date, desc, amount });
-    });
-    return { txns, total: extractStatementTotal(text), period: extractStatementPeriod(text) };
-  } catch (e) {
-    console.error('PDF parse error:', e);
-    alert('Failed to parse PDF. Check password and file format.');
-    return null;
-  }
-}
-function matchTransactions(stmtTxns, cardKey, period) {
-  const appTxns = Object.keys(appState.months||{}).flatMap(mk => {
-    const md = getMDFor(mk);
-    return ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc']
-      .flatMap(cat => (md[cat]||[]).map((it,i) => ({ mk, cat, i, date: it.date, amount: Number(it.amount||0), text: it.text||it.vendor||'', payMethod: it.payMethod })));
-  }).filter(t => t.payMethod === cardKey && (!period || (t.date >= period.start && t.date <= period.end)));
-  const matched = [], unmatched = [];
-  stmtTxns.forEach(stmt => {
-    const m = appTxns.find(app =>
-      app.amount === stmt.amount && Math.abs(new Date(app.date) - new Date(stmt.date)) / (1000*60*60*24) <= 2
-    );
-    if (m) matched.push({ stmt, app: m });
-    else unmatched.push(stmt);
-  });
-  return { matched, unmatched };
-}
-function statementUploadHtml() {
-  if (stmtParsed) {
-    // Show reconciliation UI
-    const { matched, unmatched, mismatch } = stmtParsed;
-    let html = `<section class="cc-card">
-      <div class="cc-head"><span class="cc-name">Reconciliation</span></div>`;
-    if (mismatch) {
-      html += `<div class="cc-empty" style="padding-top:0;background:var(--card-2);border-radius:8px;padding:10px;margin-bottom:8px">⚠ Statement total ₹${inr(mismatch.statementTotal)} doesn't match calculated total ₹${inr(mismatch.calculatedTotal)} — review for missing or duplicate entries.</div>`;
-    }
-    html += `<div class="cc-empty" style="padding-top:0">${matched.length} matched, ${unmatched.length} unmatched transaction(s).</div>`;
-    if (matched.length) {
-      html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Matched (reconciled):</strong></div>`;
-      matched.forEach(({stmt}) => {
-        html += `<div style="opacity:0.6;padding:6px 0;font-size:13px">✓ ₹${inr(stmt.amount)} · ${fmtDMY(new Date(stmt.date))} · ${esc(stmt.desc.substring(0,40))}</div>`;
-      });
-    }
-    if (unmatched.length) {
-      html += `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>Unmatched — file or review:</strong></div>`;
-      const catBtns = [['household','Household'],['neha','Neha'],['avishek','Avishek'],['aavia','Aavia']];
-      unmatched.forEach((txn, i) => {
-        html += `<div class="stmt-unmatched" style="padding:8px;margin-bottom:8px;background:var(--card-2);border-radius:8px">
-          <div style="font-size:13px;margin-bottom:6px">₹${inr(txn.amount)} · ${fmtDMY(new Date(txn.date))} · ${esc((txn.desc||'').substring(0,40))}</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${catBtns.map(([key,label]) => `<button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="openFileUnmatched(${i},'${key}')">${label}</button>`).join('')}
-          </div>
-        </div>`;
-      });
-    }
-    html += `<button class="add-btn" style="width:100%;margin-top:10px" onclick="resetStatement()">Done</button>`;
-    html += `</section>`;
-    return html;
-  }
-  // Show upload form
-  return `<section class="cc-card">
-    <div class="cc-head"><span class="cc-name">${CC_CYCLES[stmtCardKey]?.label || ''} Statement</span></div>
-    <div class="cc-empty" style="padding-top:0;font-size:13px">Upload a password-protected PDF statement. The app will match transactions and highlight unmatched charges for your review.</div>
-    <input id="stmt-file" class="base-inp" type="file" accept=".pdf" style="width:100%;margin-top:10px;margin-bottom:8px">
-    <input id="stmt-pwd" class="base-inp" type="password" placeholder="PDF password" style="width:100%;margin-bottom:8px">
-    <button class="add-btn" style="width:100%" onclick="submitStatementUpload()">Parse & Match</button>
-  </section>`;
-}
-async function submitStatementUpload() {
-  const file = document.getElementById('stmt-file').files[0];
-  const pwd = document.getElementById('stmt-pwd').value;
-  if (!file || !pwd) { alert('Please select a file and enter password'); return; }
-  const parsed = await parseStatement(file, pwd, stmtCardKey);
-  if (!parsed) return;
-  const { txns, total, period } = parsed;
-  const { matched, unmatched } = matchTransactions(txns, stmtCardKey, period);
-  // Persist reconciliation: matched ledger items get a new, purely-additive `reconciled` flag.
-  // This is separate from `paid`/`payMethod`, which already drive the CC outstanding-balance math.
-  matched.forEach(({app}) => {
-    const md = getMDFor(app.mk);
-    updateMonthFor(app.mk, { [app.cat]: (md[app.cat]||[]).map((it,idx)=>idx===app.i?{...it, reconciled:true}:it) });
-  });
-  let mismatch = null;
-  if (total != null && txns.length) {
-    const repDate = txns.reduce((a,b) => a.date > b.date ? a : b).date;
-    const cyc = ccCycleOf(stmtCardKey, repDate);
-    const cycle = ccBuildCycles(stmtCardKey).cycles.find(c => c.key === cyc.key);
-    if (cycle && Math.abs(cycle.total - total) > 5) mismatch = { statementTotal: total, calculatedTotal: cycle.total };
-  }
-  stmtParsed = { transactions: txns, matched, unmatched, mismatch };
-  renderMenu();
-}
-function resetStatement() { stmtParsed = null; stmtCardKey = null; setMenuView('cc'); }
-function openFileUnmatched(idx, sectionKey) {
-  const txn = stmtParsed.unmatched[idx];
-  const catMap = { household: 'householdMisc', neha: 'nehaMisc', avishek: 'avishekMisc', aavia: 'aaviaMisc' };
-  const cat = catMap[sectionKey];
-  if (!cat) return;
-  const mk = clampMonth(monthKeyOf(txn.date));
-  const tmd = getMDFor(mk);
-  updateMonthFor(mk, { [cat]: [...(tmd[cat]||[]), { text: txn.desc, amount: txn.amount, date: txn.date, paid: true, payMethod: stmtCardKey, reconciled: true }] });
-  stmtParsed.unmatched.splice(idx, 1);
-  renderMenu();
-}
 function menuMonths() {
   return Object.keys(appState.months||{}).filter(mk => mk >= MIN_MONTH).sort().reverse();
 }
@@ -2724,16 +2822,16 @@ function setAllCollapsed(v) {
 }
 
 // ── HTML builders ──────────────────────────────────────────────────────────
-function paidBtn(key, paid) {
+function paidBtn(key, paid, amount) {
   if (paid) {
     const method = (getMD().payMethod || {})[key];
     return `<div class="paid-grp"><button class="pbtn paid" onclick="togglePaid('${key}')">Paid</button>${pmChip(method)}</div>`;
   }
-  return `<button class="pbtn due" onclick="startPayment('fixed','${key}')">Mark paid</button>`;
+  return `<button class="pbtn due" onclick="startPayment('fixed','${key}',${amount})">Mark paid</button>`;
 }
 function editFixedDate(key, val) {
   const md = getMD();
-  updateMonth({ payDate:{ ...(md.payDate||{}), [key]: val } });
+  updateMonth({ payDate:{ ...(md.payDate||{}), [key]: val } }, `changed ${fixedLabel(key)} due-date to ${val}`);
 }
 function ledgerRow(key, label, sub, amount, paid, controls='') {
   const pd = (getMD().payDate||{})[key] || '';
@@ -2747,7 +2845,7 @@ function ledgerRow(key, label, sub, amount, paid, controls='') {
     </div>
     <div class="lrow-right">
       <span class="lrow-amt">₹${inr(amount)}</span>
-      ${paidBtn(key, paid)}
+      ${paidBtn(key, paid, amount)}
     </div>
   </div>
   ${controls?`<div class="lrow-ctrl">${controls}</div>`:''}
@@ -2767,6 +2865,40 @@ function dateChips(dim, dates, toggleFn) {
       return `<button class="chip${on?' on':''}" onclick="${toggleFn}(${day})">${day}</button>`;
     }).join('')
   }</div>`;
+}
+// ── Custom fixed items: delete control + per-type row rendering ────────────
+function fixedDeleteControl(key, label) {
+  return `<button class="base-edit-btn" title="Stop tracking" onclick="discontinueFixedItem('${key}','${esc(label)}')">🗑</button>`;
+}
+function customItemsSectionHtml(mk, section, md, dim) {
+  return activeCustomItems(mk, section).map(it => {
+    const amount = customItemAmount(mk, it.key, it);
+    const del = fixedDeleteControl(it.key, it.label);
+    if (it.type === 'leaveProrated') {
+      const base = effectiveBase(mk, it.key, it.amount);
+      const leaves = md.maidLeaves[it.key] ?? 0;
+      return ledgerRow(it.key, it.label, `base ₹${inr(base)} · ${leaves} leave${leaves===1?'':'s'} this month`, amount, !!md.paid[it.key],
+        `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${it.key}',-1)`,`changeLeaves('${it.key}',1)`,leaves)}</div>${baseEditControl(it.key, base)}${del}`);
+    }
+    if (it.type === 'attendance') {
+      const attended = !!(md.customAttended||{})[it.key];
+      const base = effectiveBase(mk, it.key, it.amount);
+      return ledgerRow(it.key, it.label, `₹${inr(base)} flat if attended this month`, amount, !!md.paid[it.key],
+        `<label class="chk-row"><input type="checkbox" ${attended?'checked':''} onchange="toggleCustomAttended('${it.key}')"> Attended this month</label>${baseEditControl(it.key, base)}${del}`);
+    }
+    if (it.type === 'perClassDate') {
+      const rate = effectiveBase(mk, it.key+'Rate', it.rate);
+      const dates = (md.customClassDates||{})[it.key] || [];
+      const chips = `<div class="chips">${Array.from({length:dim},(_,i)=>i+1).map(day=>{
+        const on = dates.includes(day);
+        return `<button class="chip${on?' on':''}" onclick="toggleCustomClassDate('${it.key}',${day})">${day}</button>`;
+      }).join('')}</div>`;
+      return ledgerRow(it.key, it.label, `₹${inr(rate)} × ${dates.length} class${dates.length===1?'':'es'}`, amount, !!md.paid[it.key],
+        chips + baseEditControl(it.key+'Rate', rate, 'Per class') + del);
+    }
+    return ledgerRow(it.key, it.label, 'flat, custom', amount, !!md.paid[it.key],
+      baseEditControl(it.key, effectiveBase(mk, it.key, it.amount)) + del);
+  }).join('');
 }
 function miscItemList(cat, items) {
   const total = (items||[]).reduce((s,it)=>s+Number(it.amount||0),0);
@@ -2856,8 +2988,9 @@ function render() {
   document.getElementById('month-lbl').innerHTML =
     parts.length===2 ? `${parts[0]} <span class="yr">${parts[1]}</span>` : ml;
 
-  const backBtn = document.querySelector('#month-nav .nav-btn');
-  if (backBtn) backBtn.style.opacity = currentMonth <= MIN_MONTH ? '0.3' : '1';
+  const navBtns = document.querySelectorAll('#month-nav .nav-btn');
+  if (navBtns[0]) navBtns[0].style.opacity = currentMonth <= navMinMonth() ? '0.3' : '1';
+  if (navBtns[1]) navBtns[1].style.opacity = currentMonth >= todayMonthKey() ? '0.3' : '1';
 
   const todayBtn = document.getElementById('today-jump');
   if (todayBtn) todayBtn.classList.toggle('hidden', currentMonth === todayMonthKey());
@@ -2885,21 +3018,25 @@ function render() {
   const dim = daysInMonth(currentMonth);
 
   // --- Maids ---
-  const maidAmounts = MAIDS.map(m => {
+  const activeMaids = MAIDS.filter(m => !isDiscontinued(m.key, currentMonth));
+  const maidAmounts = activeMaids.map(m => {
     const base   = effectiveBase(currentMonth, m.key, m.base);
     const leaves = md.maidLeaves[m.key]??2;
     return { ...m, base, leaves, amount: maidPayout(base, leaves, dim) };
   });
   const japaActive = currentMonth>='2026-08' && currentMonth<='2026-10';
+  const japaDiscontinued = isDiscontinued('japaMaid', currentMonth);
   const japaDays   = md.japaDaysPresent==null ? defaultJapaDays(currentMonth) : md.japaDaysPresent;
-  const japaAmt    = japaMaidPayout(currentMonth, md.japaDaysPresent);
+  const japaAmt    = japaDiscontinued ? 0 : japaMaidPayout(currentMonth, md.japaDaysPresent);
 
   // --- Aavia ---
   const tuition  = schoolTuition(currentMonth);
   const termFee  = schoolTermFee(currentMonth);
   const busFee   = schoolBusFee(currentMonth);
-  const schoolTot= tuition + termFee + busFee;
-  const bizone   = bizoneFee(currentMonth);
+  const schoolDiscontinued = isDiscontinued('schoolFees', currentMonth);
+  const schoolTot= schoolDiscontinued ? 0 : tuition + termFee + busFee;
+  const bizoneDiscontinued = isDiscontinued('bizone', currentMonth);
+  const bizone   = bizoneDiscontinued ? 0 : bizoneFee(currentMonth);
   const curMo    = parseInt(currentMonth.split('-')[1]);
   const isJanPay = curMo === 1;
   const isFebMar = curMo === 2 || curMo === 3;
@@ -2908,28 +3045,37 @@ function render() {
   const busBase        = effectiveBase(currentMonth, 'schoolBus',  25150);
   const bizoneBase     = effectiveBase(currentMonth, 'bizone',     12285);
   const swimBase  = effectiveBase(currentMonth, 'swimming', 4000);
-  const swimAmt   = md.swimmingAttended ? swimBase : 0;
+  const swimDiscontinued = isDiscontinued('swimming', currentMonth);
+  const swimAmt   = (!swimDiscontinued && md.swimmingAttended) ? swimBase : 0;
   const bharatBase= effectiveBase(currentMonth, 'bharatnatyam', 1500);
-  const bharatAmt = md.bharatnatyamAttended ? bharatBase : 0;
+  const bharatDiscontinued = isDiscontinued('bharatnatyam', currentMonth);
+  const bharatAmt = (!bharatDiscontinued && md.bharatnatyamAttended) ? bharatBase : 0;
   const chessRate = effectiveBase(currentMonth, 'chessRate', 500);
   const skateRate = effectiveBase(currentMonth, 'skatingRate', 375);
-  const chessAmt  = (md.chessDates||[]).length * chessRate;
-  const skateAmt  = (md.skatingDates||[]).length * skateRate;
-  const english   = englishFee(currentMonth);
+  const chessDiscontinued = isDiscontinued('chess', currentMonth);
+  const skateDiscontinued = isDiscontinued('skating', currentMonth);
+  const chessAmt  = chessDiscontinued ? 0 : (md.chessDates||[]).length * chessRate;
+  const skateAmt  = skateDiscontinued ? 0 : (md.skatingDates||[]).length * skateRate;
+  const englishDiscontinued = isDiscontinued('english', currentMonth);
+  const english   = englishDiscontinued ? 0 : englishFee(currentMonth);
   const aaviaMiscTot  = (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
   const aaviaMiscPaid = (md.aaviaMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
-  const aaviaTot  = schoolTot+bizone+swimAmt+bharatAmt+chessAmt+skateAmt+english+aaviaMiscTot;
+  const aaviaTot  = schoolTot+bizone+swimAmt+bharatAmt+chessAmt+skateAmt+english+aaviaMiscTot+customSectionTotal(currentMonth,'aavia');
   const aaviaPaid =
     (md.paid.schoolFees?schoolTot:0)+(md.paid.bizone?bizone:0)+
     (md.paid.swimming?swimAmt:0)+(md.paid.bharatnatyam?bharatAmt:0)+
     (md.paid.chess?chessAmt:0)+(md.paid.skating?skateAmt:0)+
-    (md.paid.english?english:0)+aaviaMiscPaid;
+    (md.paid.english?english:0)+aaviaMiscPaid+customSectionPaid(currentMonth,'aavia');
 
   // --- Fixed ---
-  const carEmi    = carEmiFee(currentMonth);
-  const rent      = effectiveBase(currentMonth, 'rent', rentFee(currentMonth));
-  const fixedTot  = SUKANYA + carEmi + rent;
-  const fixedPaid = (md.paid.sukanya?SUKANYA:0)+(md.paid.carEmi?carEmi:0)+(md.paid.rent?rent:0);
+  const carEmiDiscontinued = isDiscontinued('carEmi', currentMonth);
+  const carEmi    = carEmiDiscontinued ? 0 : carEmiFee(currentMonth);
+  const rentDiscontinued = isDiscontinued('rent', currentMonth);
+  const rent      = rentDiscontinued ? 0 : effectiveBase(currentMonth, 'rent', rentFee(currentMonth));
+  const sukanyaDiscontinued = isDiscontinued('sukanya', currentMonth);
+  const sukanyaAmt = sukanyaDiscontinued ? 0 : SUKANYA;
+  const fixedTot  = sukanyaAmt + carEmi + rent + customSectionTotal(currentMonth,'fixed');
+  const fixedPaid = (md.paid.sukanya?sukanyaAmt:0)+(md.paid.carEmi?carEmi:0)+(md.paid.rent?rent:0)+customSectionPaid(currentMonth,'fixed');
 
   // --- Household ---
   const groceries   = md.groceries||[];
@@ -2941,20 +3087,20 @@ function render() {
   const hhGrocPaid  = (md.householdGroceries||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
   const hhMiscTot   = (md.householdMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
   const hhMiscPaid  = (md.householdMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
-  const hhTot       = groceryTot + hhGrocTot + hhMiscTot;
-  const hhPaid      = groceryPaid + hhGrocPaid + hhMiscPaid;
+  const hhTot       = groceryTot + hhGrocTot + hhMiscTot + customSectionTotal(currentMonth,'household');
+  const hhPaid      = groceryPaid + hhGrocPaid + hhMiscPaid + customSectionPaid(currentMonth,'household');
 
   // --- Neha / Avishek ---
-  const nehaTot  = (md.nehaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-  const avishTot = (md.avishekMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-  const nehaPaid = (md.nehaMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
-  const avishPd  = (md.avishekMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
+  const nehaTot  = (md.nehaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0) + customSectionTotal(currentMonth,'neha');
+  const avishTot = (md.avishekMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0) + customSectionTotal(currentMonth,'avishek');
+  const nehaPaid = (md.nehaMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0) + customSectionPaid(currentMonth,'neha');
+  const avishPd  = (md.avishekMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0) + customSectionPaid(currentMonth,'avishek');
 
   // --- Grand totals ---
-  const maidsTot   = maidAmounts.reduce((s,m)=>s+m.amount,0);
-  const maidsPaid  = maidAmounts.reduce((s,m)=>s+(md.paid[m.key]?m.amount:0),0) + (md.paid.japaMaid?japaAmt:0);
+  const maidsTot   = maidAmounts.reduce((s,m)=>s+m.amount,0) + customSectionTotal(currentMonth,'maids');
+  const maidsPaid  = maidAmounts.reduce((s,m)=>s+(md.paid[m.key]?m.amount:0),0) + (md.paid.japaMaid?japaAmt:0) + customSectionPaid(currentMonth,'maids');
   const maidsSecTot = maidsTot + japaAmt;
-  const grandTot   = maidsTot+japaAmt+aaviaTot+SUKANYA+carEmi+rent+hhTot+nehaTot+avishTot;
+  const grandTot   = maidsTot+japaAmt+aaviaTot+fixedTot+hhTot+nehaTot+avishTot;
   const paidTot    = maidsPaid + aaviaPaid + fixedPaid + hhPaid + nehaPaid + avishPd;
   const pendingTot = grandTot - paidTot;
   const pct = grandTot>0 ? Math.round(paidTot/grandTot*100) : 0;
@@ -2970,7 +3116,7 @@ function render() {
 
   // ── Hero ────────────────────────────────────────────────────────────
   document.getElementById('summary').innerHTML = `
-<div class="hero${heroSpendsOpen?' expanded':''}" onclick="toggleHeroSpends()">
+<div class="hero">
   <div class="hero-row">
     <div class="hero-lead">
       <div class="hero-lbl">Still to pay</div>
@@ -2984,9 +3130,8 @@ function render() {
   <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
   <div class="hero-foot">
     <span><span class="mono">${pct}%</span> settled</span>
-    <span style="display:flex;align-items:center;gap:4px">${pendingTot<=0.5?'All cleared 🎉':`<span class="mono">₹${inr(paidTot)}</span><span>&nbsp;of&nbsp;</span><span class="mono">₹${inr(grandTot)}</span>`}<span class="hero-chev">⌄</span></span>
+    <span>${pendingTot<=0.5?'All cleared 🎉':`<span class="mono">₹${inr(paidTot)}</span><span>&nbsp;of&nbsp;</span><span class="mono">₹${inr(grandTot)}</span>`}</span>
   </div>
-  <div class="hero-spends-wrap"><div class="hero-spends">${heroSpendsHtml(currentMonth)}</div></div>
 </div>`;
 
   // ── Section bodies ──────────────────────────────────────────────────
@@ -2996,45 +3141,65 @@ function render() {
     maidsBody += ledgerRow(m.key, m.label,
       `base ₹${inr(m.base)} · ${m.leaves} leave${m.leaves===1?'':'s'} this month`,
       m.amount, !!md.paid[m.key],
-      `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${m.key}',${-maidLeafStep(m.key)})`,`changeLeaves('${m.key}',${maidLeafStep(m.key)})`,m.leaves)}</div>${baseEditControl(m.key, m.base)}`
+      `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${m.key}',${-maidLeafStep(m.key)})`,`changeLeaves('${m.key}',${maidLeafStep(m.key)})`,m.leaves)}</div>${baseEditControl(m.key, m.base)}${fixedDeleteControl(m.key, m.label)}`
     );
   });
-  maidsBody += ledgerRow('japaMaid','Japa Maid',
-    japaActive ? `live-in · flat ₹28,000/mo, prorated · ${japaDays} of ${dim} days` : 'not in service this month',
-    japaAmt, !!md.paid.japaMaid,
-    japaActive ? `<div class="field"><span class="field-lbl">Days present</span>${stepper('changeJapaDays(-1)','changeJapaDays(1)',japaDays)}</div>` : ''
-  );
+  if (!japaDiscontinued) {
+    maidsBody += ledgerRow('japaMaid','Japa Maid',
+      japaActive ? `live-in · flat ₹28,000/mo, prorated · ${japaDays} of ${dim} days` : 'not in service this month',
+      japaAmt, !!md.paid.japaMaid,
+      (japaActive ? `<div class="field"><span class="field-lbl">Days present</span>${stepper('changeJapaDays(-1)','changeJapaDays(1)',japaDays)}</div>` : '') + fixedDeleteControl('japaMaid','Japa Maid')
+    );
+  }
+  maidsBody += customItemsSectionHtml(currentMonth, 'maids', md, dim);
 
   // Aavia
   let aaviaBody = `<div class="sublbl">School</div>`;
-  aaviaBody += ledgerRow('schoolFees','P G Garodia School', schoolSub, schoolTot, !!md.paid.schoolFees,
-    baseEditControl('schoolRate', schoolRateBase, 'Tuition Base') +
-    (isTermMo ? baseEditControl('schoolBus', busBase, 'Bus Base') : ''));
-  aaviaBody += ledgerRow('bizone','Bizone (snacks)',
-    bizone ? `₹${inr(bizone)} this term` : 'nothing due this month',
-    bizone, !!md.paid.bizone,
-    isTermMo ? baseEditControl('bizone', bizoneBase, 'Bizone Base') : '');
+  if (!schoolDiscontinued) {
+    aaviaBody += ledgerRow('schoolFees','P G Garodia School', schoolSub, schoolTot, !!md.paid.schoolFees,
+      baseEditControl('schoolRate', schoolRateBase, 'Tuition Base') +
+      (isTermMo ? baseEditControl('schoolBus', busBase, 'Bus Base') : '') + fixedDeleteControl('schoolFees','P G Garodia School'));
+  }
+  if (!bizoneDiscontinued) {
+    aaviaBody += ledgerRow('bizone','Bizone (snacks)',
+      bizone ? `₹${inr(bizone)} this term` : 'nothing due this month',
+      bizone, !!md.paid.bizone,
+      (isTermMo ? baseEditControl('bizone', bizoneBase, 'Bizone Base') : '') + fixedDeleteControl('bizone','Bizone (snacks)'));
+  }
   aaviaBody += `<div class="sublbl">Classes</div>`;
-  aaviaBody += ledgerRow('english','English (Sheetal)', english?'lump-sum installment due':'no payment due this month', english, !!md.paid.english);
-  aaviaBody += ledgerRow('swimming','Swimming',`₹${inr(swimBase)} flat if attended this month`, swimAmt, !!md.paid.swimming,
-    `<label class="chk-row"><input type="checkbox" ${md.swimmingAttended?'checked':''} onchange="toggleSwimming()"> Attended this month</label>${baseEditControl('swimming', swimBase)}`);
-  aaviaBody += ledgerRow('bharatnatyam','Bharatnatyam',`₹${inr(bharatBase)} flat if attended this month`, bharatAmt, !!md.paid.bharatnatyam,
-    `<label class="chk-row"><input type="checkbox" ${md.bharatnatyamAttended?'checked':''} onchange="toggleBharatnatyam()"> Attended this month</label>${baseEditControl('bharatnatyam', bharatBase)}`);
-  aaviaBody += ledgerRow('chess','Chess',
-    `₹${inr(chessRate)} × ${(md.chessDates||[]).length} class${(md.chessDates||[]).length===1?'':'es'}`,
-    chessAmt, !!md.paid.chess,
-    dateChips(dim, md.chessDates||[], 'toggleChessDate') + baseEditControl('chessRate', chessRate, 'Per class'));
-  aaviaBody += ledgerRow('skating','Skating',
-    `₹${inr(skateRate)} × ${(md.skatingDates||[]).length} class${(md.skatingDates||[]).length===1?'':'es'}`,
-    skateAmt, !!md.paid.skating,
-    dateChips(dim, md.skatingDates||[], 'toggleSkatingDate') + baseEditControl('skatingRate', skateRate, 'Per class'));
+  if (!englishDiscontinued) {
+    aaviaBody += ledgerRow('english','English (Sheetal)', english?'lump-sum installment due':'no payment due this month', english, !!md.paid.english,
+      fixedDeleteControl('english','English (Sheetal)'));
+  }
+  if (!swimDiscontinued) {
+    aaviaBody += ledgerRow('swimming','Swimming',`₹${inr(swimBase)} flat if attended this month`, swimAmt, !!md.paid.swimming,
+      `<label class="chk-row"><input type="checkbox" ${md.swimmingAttended?'checked':''} onchange="toggleSwimming()"> Attended this month</label>${baseEditControl('swimming', swimBase)}${fixedDeleteControl('swimming','Swimming')}`);
+  }
+  if (!bharatDiscontinued) {
+    aaviaBody += ledgerRow('bharatnatyam','Bharatnatyam',`₹${inr(bharatBase)} flat if attended this month`, bharatAmt, !!md.paid.bharatnatyam,
+      `<label class="chk-row"><input type="checkbox" ${md.bharatnatyamAttended?'checked':''} onchange="toggleBharatnatyam()"> Attended this month</label>${baseEditControl('bharatnatyam', bharatBase)}${fixedDeleteControl('bharatnatyam','Bharatnatyam')}`);
+  }
+  if (!chessDiscontinued) {
+    aaviaBody += ledgerRow('chess','Chess',
+      `₹${inr(chessRate)} × ${(md.chessDates||[]).length} class${(md.chessDates||[]).length===1?'':'es'}`,
+      chessAmt, !!md.paid.chess,
+      dateChips(dim, md.chessDates||[], 'toggleChessDate') + baseEditControl('chessRate', chessRate, 'Per class') + fixedDeleteControl('chess','Chess'));
+  }
+  if (!skateDiscontinued) {
+    aaviaBody += ledgerRow('skating','Skating',
+      `₹${inr(skateRate)} × ${(md.skatingDates||[]).length} class${(md.skatingDates||[]).length===1?'':'es'}`,
+      skateAmt, !!md.paid.skating,
+      dateChips(dim, md.skatingDates||[], 'toggleSkatingDate') + baseEditControl('skatingRate', skateRate, 'Per class') + fixedDeleteControl('skating','Skating'));
+  }
   aaviaBody += `<div class="sublbl">Miscellaneous</div>${miscItemList('aaviaMisc', md.aaviaMisc)}`;
+  aaviaBody += customItemsSectionHtml(currentMonth, 'aavia', md, dim);
 
   // Fixed
   let fixedBody = '';
-  fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',SUKANYA,!!md.paid.sukanya);
-  fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi);
-  fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, baseEditControl('rent', rent));
+  if (!sukanyaDiscontinued) fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',sukanyaAmt,!!md.paid.sukanya, fixedDeleteControl('sukanya','Sukanya Samriddhi'));
+  if (!carEmiDiscontinued) fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi, fixedDeleteControl('carEmi','Car EMI'));
+  if (!rentDiscontinued) fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, baseEditControl('rent', rent) + fixedDeleteControl('rent','Rent'));
+  fixedBody += customItemsSectionHtml(currentMonth, 'fixed', md, dim);
 
   // Household
   const gDraftV = gDraft.vendor; const gDraftC = gDraft.category;
@@ -3071,24 +3236,26 @@ function render() {
   });
   hhBody += `<div class="sublbl">Household Groceries</div>${miscItemList('householdGroceries', md.householdGroceries)}`;
   hhBody += `<div class="sublbl">Household Miscellaneous</div>${miscItemList('householdMisc', md.householdMisc)}`;
+  hhBody += customItemsSectionHtml(currentMonth, 'household', md, dim);
 
   // Neha / Avishek
-  const nehaBody  = miscItemList('nehaMisc', md.nehaMisc);
-  const avishBody = miscItemList('avishekMisc', md.avishekMisc);
+  const nehaBody  = miscItemList('nehaMisc', md.nehaMisc) + customItemsSectionHtml(currentMonth, 'neha', md, dim);
+  const avishBody = miscItemList('avishekMisc', md.avishekMisc) + customItemsSectionHtml(currentMonth, 'avishek', md, dim);
 
   // ── Assemble ────────────────────────────────────────────────────────
-  const secDefs = [['maids',maidsSecTot-maidsPaid],['aavia',aaviaTot-aaviaPaid],['fixed',fixedTot-fixedPaid],
-                   ['household',hhTot-hhPaid],['neha',nehaTot-nehaPaid],['avishek',avishTot-avishPd]];
+  // Display order: Household, Neha, Aavia, Avishek, Maids, Fixed.
+  const secDefs = [['household',hhTot-hhPaid],['neha',nehaTot-nehaPaid],['aavia',aaviaTot-aaviaPaid],
+                   ['avishek',avishTot-avishPd],['maids',maidsSecTot-maidsPaid],['fixed',fixedTot-fixedPaid]];
   const anyOpen = secDefs.some(([id,pending]) => isOpen(id, pending));
   let html = `<div class="toolbar">
     <button class="tbtn" onclick="setAllCollapsed(${anyOpen})">${anyOpen?'Collapse all':'Expand all'}</button>
   </div><div id="sections">`;
-  html += sectionCard('maids',    'Maids',     maidsSecTot, maidsPaid, maidsBody);
-  html += sectionCard('aavia',    'Aavia',     aaviaTot,    aaviaPaid, aaviaBody);
-  html += sectionCard('fixed',    'Fixed',     fixedTot,    fixedPaid, fixedBody);
   html += sectionCard('household','Household', hhTot,       hhPaid,    hhBody, { span:true });
   html += sectionCard('neha',     'Neha',      nehaTot,     nehaPaid,  nehaBody);
+  html += sectionCard('aavia',    'Aavia',     aaviaTot,    aaviaPaid, aaviaBody);
   html += sectionCard('avishek',  'Avishek',   avishTot,    avishPd,   avishBody);
+  html += sectionCard('maids',    'Maids',     maidsSecTot, maidsPaid, maidsBody);
+  html += sectionCard('fixed',    'Fixed',     fixedTot,    fixedPaid, fixedBody);
   html += `</div>`;
 
   document.getElementById('app-body').innerHTML = html;
@@ -3142,7 +3309,7 @@ function renderHome() {
   const pct = t.total>0 ? Math.round(paidTot/t.total*100) : 0;
 
   document.getElementById('summary').innerHTML = `
-<div class="hero">
+<div class="hero${heroSpendsOpen?' expanded':''}" onclick="toggleHeroSpends()">
   <div class="hero-row">
     <div class="hero-lead">
       <div class="hero-lbl">Month spend</div>
@@ -3154,8 +3321,11 @@ function renderHome() {
     </div>
   </div>
   <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
-  <div class="hero-foot"><span><span class="mono">${pct}%</span> settled</span><span>${monthLabel(currentMonth)}</span></div>
-  ${heroSpendsHtml(currentMonth)}
+  <div class="hero-foot">
+    <span><span class="mono">${pct}%</span> settled</span>
+    <span style="display:flex;align-items:center;gap:4px">${monthLabel(currentMonth)}<span class="hero-chev">⌄</span></span>
+  </div>
+  <div class="hero-spends-wrap"><div class="hero-spends">${heroSpendsHtml(currentMonth)}</div></div>
 </div>`;
 
   document.getElementById('app-body').innerHTML =
@@ -3328,7 +3498,7 @@ function renderOutstanding() {
         </div>
         <div class="out-item-right">
           <span class="out-amt">₹${inr(it.amount)}</span>
-          <button class="pbtn act sm" onclick="toggleOutItem('${g.mk}','${it.toggleType}','${it.toggleKey}',${it.toggleIdx})">Mark paid</button>
+          <button class="pbtn act sm" onclick="toggleOutItem('${g.mk}','${it.toggleType}','${it.toggleKey}',${it.toggleIdx},${it.amount})">Mark paid</button>
         </div>
       </div>`;
     });
@@ -3457,13 +3627,23 @@ function unlockGate() {
   const g = document.getElementById('lock-gate');
   if (g) g.classList.add('hidden');
 }
+// TEMPORARY diagnostic instrumentation for the "no fingerprint prompt" report — logs
+// via the existing Activity channel, once per cold app-process launch (not on every
+// resume, so it doesn't crowd out real activity entries). Remove once the failing
+// branch is identified and the real fix is scoped.
+let lockDiagFired = false;
+function lockDiag(msg) {
+  if (lockDiagFired) return;
+  lockDiagFired = true;
+  logActivity('lock-diag: ' + msg);
+}
 async function requireLock() {
-  if (!(uiPrefs.lockEnabled ?? true)) return; // user turned it off in the hamburger menu
+  if (!(uiPrefs.lockEnabled ?? true)) { lockDiag('skipped — lock toggle is off'); return; } // user turned it off in the hamburger menu
   const Bio = getNativePlugin('BiometricAuth');
-  if (!Bio) return; // browser/preview or older shell without the plugin — no-op
+  if (!Bio) { lockDiag('skipped — BiometricAuth plugin not found'); return; } // browser/preview or older shell without the plugin — no-op
   let check;
-  try { check = await Bio.checkBiometry(); } catch (e) { return; } // can't check → don't lock the user out
-  if (!check || (!check.isAvailable && !check.deviceIsSecure)) return; // nothing to authenticate against
+  try { check = await Bio.checkBiometry(); } catch (e) { lockDiag('checkBiometry() threw — ' + (e && (e.code||e.message) || String(e))); return; } // can't check → don't lock the user out
+  if (!check || (!check.isAvailable && !check.deviceIsSecure)) { lockDiag('skipped — isAvailable=' + !!(check&&check.isAvailable) + ', deviceIsSecure=' + !!(check&&check.deviceIsSecure)); return; } // nothing to authenticate against
   const g = document.getElementById('lock-gate');
   const btn = document.getElementById('lock-gate-btn');
   const attempt = async () => {
@@ -3476,8 +3656,10 @@ async function requireLock() {
         androidSubtitle: 'Use your fingerprint, face, or device PIN',
       });
       unlockGate();
+      lockDiag('unlocked successfully');
     } catch (e) {
       // authentication failed/cancelled — gate stays up, user retries via the button
+      lockDiag('authenticate() failed/cancelled — ' + (e && (e.code||e.message) || String(e)));
     }
   };
   if (btn) btn.onclick = attempt;
