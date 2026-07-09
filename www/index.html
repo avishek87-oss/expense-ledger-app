@@ -3627,7 +3627,17 @@ function unlockGate() {
   const g = document.getElementById('lock-gate');
   if (g) g.classList.add('hidden');
 }
+// internalAuthenticate() launches a separate native AuthActivity to show the
+// biometric prompt — when it finishes (success, failure, or cancel) and
+// control returns to the main Activity, Android fires a normal onResume,
+// which our own 'resume' listener (below) treats as "app came back from
+// background" and calls requireLock() again — relaunching the prompt in an
+// infinite loop. Guard against re-entering requireLock() while our own
+// auth flow is already in flight, so only a genuine background→foreground
+// transition (not our own AuthActivity returning) triggers a fresh check.
+let biometricAuthInFlight = false;
 async function requireLock() {
+  if (biometricAuthInFlight) return; // resume fired because our own AuthActivity just returned — not a real backgrounding
   if (!(uiPrefs.lockEnabled ?? true)) return; // user turned it off in the hamburger menu
   // The @aparajita/capacitor-biometric-auth package registers its native plugin
   // as 'BiometricAuthNative' (see its index.js: registerPlugin('BiometricAuthNative', ...),
@@ -3655,6 +3665,7 @@ async function requireLock() {
   logActivity('lock-diag2: checkBiometry isAvailable=' + check.isAvailable + ' deviceIsSecure=' + check.deviceIsSecure +
     ' biometryType=' + check.biometryType + ' code=' + (check.code||'-') + ' reason=' + (check.reason||'-'));
   const attempt = async () => {
+    biometricAuthInFlight = true;
     try {
       // The plugin's public `authenticate()` is a thin JS-side wrapper (in its
       // base.js) around the real native method, which is actually named
@@ -3664,7 +3675,9 @@ async function requireLock() {
       // @PluginMethod checkBiometry and internalAuthenticate, never
       // `authenticate`). The wrapper adds nothing but nicer error typing, so
       // calling internalAuthenticate directly with the same options is
-      // equivalent.
+      // equivalent. Internally this launches a separate native AuthActivity
+      // (see biometricAuthInFlight guard above) rather than showing an
+      // in-place dialog.
       await Bio.internalAuthenticate({
         reason: 'Unlock Household Ledger',
         cancelTitle: 'Cancel',
@@ -3678,6 +3691,11 @@ async function requireLock() {
       const detail = (e && (e.code || e.message)) || String(e);
       if (msgEl) msgEl.textContent = 'Diag: authenticate() failed — ' + detail;
       logActivity('lock-diag2: authenticate() failed — ' + detail);
+    } finally {
+      // Clear on a short delay, not immediately — the AuthActivity-triggered
+      // onResume can arrive a beat after this promise settles, and we need
+      // the guard to still be up when that spurious resume event lands.
+      setTimeout(() => { biometricAuthInFlight = false; }, 1500);
     }
   };
   if (btn) btn.onclick = attempt;
