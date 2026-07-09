@@ -3656,7 +3656,16 @@ async function requireLock() {
     ' biometryType=' + check.biometryType + ' code=' + (check.code||'-') + ' reason=' + (check.reason||'-'));
   const attempt = async () => {
     try {
-      await Bio.authenticate({
+      // The plugin's public `authenticate()` is a thin JS-side wrapper (in its
+      // base.js) around the real native method, which is actually named
+      // `internalAuthenticate` — `authenticate` only exists on that JS wrapper
+      // class, not on the raw Capacitor plugin proxy this app gets via
+      // getNativePlugin() (confirmed: the native Android class only declares
+      // @PluginMethod checkBiometry and internalAuthenticate, never
+      // `authenticate`). The wrapper adds nothing but nicer error typing, so
+      // calling internalAuthenticate directly with the same options is
+      // equivalent.
+      await Bio.internalAuthenticate({
         reason: 'Unlock Household Ledger',
         cancelTitle: 'Cancel',
         allowDeviceCredential: true,
