@@ -3627,23 +3627,21 @@ function unlockGate() {
   const g = document.getElementById('lock-gate');
   if (g) g.classList.add('hidden');
 }
-// TEMPORARY diagnostic instrumentation for the "no fingerprint prompt" report — logs
-// via the existing Activity channel, once per cold app-process launch (not on every
-// resume, so it doesn't crowd out real activity entries). Remove once the failing
-// branch is identified and the real fix is scoped.
-let lockDiagFired = false;
-function lockDiag(msg) {
-  if (lockDiagFired) return;
-  lockDiagFired = true;
-  logActivity('lock-diag: ' + msg);
-}
 async function requireLock() {
-  if (!(uiPrefs.lockEnabled ?? true)) { lockDiag('skipped — lock toggle is off'); return; } // user turned it off in the hamburger menu
-  const Bio = getNativePlugin('BiometricAuth');
-  if (!Bio) { lockDiag('skipped — BiometricAuth plugin not found'); return; } // browser/preview or older shell without the plugin — no-op
+  if (!(uiPrefs.lockEnabled ?? true)) return; // user turned it off in the hamburger menu
+  // The @aparajita/capacitor-biometric-auth package registers its native plugin
+  // as 'BiometricAuthNative' (see its index.js: registerPlugin('BiometricAuthNative', ...),
+  // then re-exports the proxy under the friendlier name `BiometricAuth` for ESM
+  // consumers). This app has no bundler/ESM imports, so it must look the plugin
+  // up by its actual registered Capacitor name — using 'BiometricAuth' here (the
+  // export alias, not the registration name) silently failed to find it, which
+  // is exactly what a lock-diag: skipped — BiometricAuth plugin not found entry
+  // in Activity confirmed on a real device.
+  const Bio = getNativePlugin('BiometricAuthNative');
+  if (!Bio) return; // browser/preview or older shell without the plugin — no-op
   let check;
-  try { check = await Bio.checkBiometry(); } catch (e) { lockDiag('checkBiometry() threw — ' + (e && (e.code||e.message) || String(e))); return; } // can't check → don't lock the user out
-  if (!check || (!check.isAvailable && !check.deviceIsSecure)) { lockDiag('skipped — isAvailable=' + !!(check&&check.isAvailable) + ', deviceIsSecure=' + !!(check&&check.deviceIsSecure)); return; } // nothing to authenticate against
+  try { check = await Bio.checkBiometry(); } catch (e) { return; } // can't check → don't lock the user out
+  if (!check || (!check.isAvailable && !check.deviceIsSecure)) return; // nothing to authenticate against
   const g = document.getElementById('lock-gate');
   const btn = document.getElementById('lock-gate-btn');
   const attempt = async () => {
@@ -3656,10 +3654,8 @@ async function requireLock() {
         androidSubtitle: 'Use your fingerprint, face, or device PIN',
       });
       unlockGate();
-      lockDiag('unlocked successfully');
     } catch (e) {
       // authentication failed/cancelled — gate stays up, user retries via the button
-      lockDiag('authenticate() failed/cancelled — ' + (e && (e.code||e.message) || String(e)));
     }
   };
   if (btn) btn.onclick = attempt;
