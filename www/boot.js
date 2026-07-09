@@ -125,10 +125,10 @@ let biometricAuthInFlight = false;
 // fixed-delay guard and retrigger authenticate() automatically.
 let lastAuthSettledAt = 0;
 const RESUME_GUARD_MS = 4000;
-// Real-device logs (lock-diag2) showed dozens of automatic userCancel/
-// systemCancel cycles in rapid succession with no user input possible —
-// allowDeviceCredential:true means AuthActivity shows no cancel button at
-// all, so these could only be resume-triggered auto-retries, not taps.
+// Real-device logs showed dozens of automatic userCancel/systemCancel cycles
+// in rapid succession with no user input possible — allowDeviceCredential:true
+// means AuthActivity shows no cancel button at all, so these could only be
+// resume-triggered auto-retries, not taps.
 // Cap consecutive *automatic* (resume-triggered) attempts so a bad cycle
 // can never spin forever — after a couple of automatic failures, wait for
 // an explicit tap on the Unlock button instead of retrying on our own.
@@ -142,10 +142,8 @@ async function requireLock() {
   // as 'BiometricAuthNative' (see its index.js: registerPlugin('BiometricAuthNative', ...),
   // then re-exports the proxy under the friendlier name `BiometricAuth` for ESM
   // consumers). This app has no bundler/ESM imports, so it must look the plugin
-  // up by its actual registered Capacitor name — using 'BiometricAuth' here (the
-  // export alias, not the registration name) silently failed to find it, which
-  // is exactly what a lock-diag: skipped — BiometricAuth plugin not found entry
-  // in Activity confirmed on a real device.
+  // up by its actual registered Capacitor name — 'BiometricAuth' (the export
+  // alias, not the registration name) silently fails to find it.
   const Bio = getNativePlugin('BiometricAuthNative');
   if (!Bio) return; // browser/preview or older shell without the plugin — no-op
   let check;
@@ -155,22 +153,8 @@ async function requireLock() {
   const btn = document.getElementById('lock-gate-btn');
   const skipBtn = document.getElementById('lock-gate-skip');
   const msgEl = document.getElementById('lock-gate-msg');
-  // TEMPORARY diagnostic — the "Unlock" button showed but tapping it did nothing
-  // visible (no native prompt). Surface checkBiometry()'s actual result and any
-  // authenticate() error directly on the lock screen (not just Activity) so we
-  // get an answer on the very next attempt, without another release+wait cycle.
-  // Remove once the real cause is found and fixed.
-  if (msgEl) msgEl.textContent = 'Diag: isAvailable=' + check.isAvailable + ', deviceIsSecure=' + check.deviceIsSecure +
-    ', biometryType=' + check.biometryType + ', code=' + (check.code||'-') + ', reason=' + (check.reason||'-');
-  logActivity('lock-diag2: checkBiometry isAvailable=' + check.isAvailable + ' deviceIsSecure=' + check.deviceIsSecure +
-    ' biometryType=' + check.biometryType + ' code=' + (check.code||'-') + ' reason=' + (check.reason||'-'));
   const attempt = async (auto) => {
     biometricAuthInFlight = true;
-    // Marker for the cold-boot check at the top of boot(): if the process
-    // gets killed while AuthActivity is in front, this is the only trace
-    // left behind, since nothing in JS memory (including this very promise)
-    // survives a process death.
-    try { localStorage.setItem('biometric-auth-pending', JSON.stringify({ at: Date.now() })); } catch (e) {}
     try {
       // The plugin's public `authenticate()` is a thin JS-side wrapper (in its
       // base.js) around the real native method, which is actually named
@@ -192,18 +176,13 @@ async function requireLock() {
       });
       unlockGate();
       consecutiveAutoFailures = 0;
-      try { localStorage.removeItem('biometric-auth-pending'); } catch (e) {}
     } catch (e) {
       // authentication failed/cancelled — gate stays up, user retries via the button
-      try { localStorage.removeItem('biometric-auth-pending'); } catch (e2) {}
-      const detail = (e && (e.code || e.message)) || String(e);
       if (auto) {
         consecutiveAutoFailures++;
       } else {
         consecutiveAutoFailures = 0; // an explicit tap always gets a fresh run of auto-retries afterward
       }
-      if (msgEl) msgEl.textContent = 'Diag: authenticate() failed — ' + detail;
-      logActivity('lock-diag2: authenticate() failed — ' + detail + (auto ? ' (auto)' : ' (manual)'));
     } finally {
       biometricAuthInFlight = false;
       lastAuthSettledAt = Date.now();
@@ -220,7 +199,7 @@ async function requireLock() {
     skipBtn.onclick = () => {
       uiPrefs.lockEnabled = false;
       saveUI();
-      logActivity('lock-diag: user disabled Screen Lock via the lock screen escape hatch');
+      logActivity('Screen Lock turned off from the lock screen (escape hatch)');
       unlockGate();
     };
   }
@@ -232,7 +211,6 @@ async function requireLock() {
     // Stop auto-retrying — wait for an explicit tap so a bad device/plugin
     // interaction can't spin forever without the user ever choosing to retry.
     if (msgEl) msgEl.textContent = 'Tap Unlock to try again.';
-    logActivity('lock-diag2: reached ' + MAX_AUTO_RETRIES + ' automatic failures in a row — waiting for a manual retry');
   }
 }
 
@@ -271,23 +249,6 @@ async function boot() {
   loadUI();
   applyTheme();
   loadAuth();
-  // TEMPORARY diagnostic — the fingerprint/PIN prompt never resolves or
-  // rejects no matter what the user does in it, which points to Android
-  // killing the app process while the biometric flow's separate native
-  // screen is in front (a known Capacitor startActivityForResult gotcha).
-  // requireLock()'s attempt() writes a marker to localStorage right before
-  // launching that screen and clears it once the promise settles either
-  // way. If a fresh cold boot finds that marker still present, the process
-  // was killed mid-flow — this proves/disproves that theory directly,
-  // since nothing else could explain the app restarting with it still set.
-  try {
-    const pending = JSON.parse(localStorage.getItem('biometric-auth-pending') || 'null');
-    if (pending && pending.at) {
-      const secsAgo = Math.round((Date.now() - pending.at) / 1000);
-      logActivity('lock-diag3: app cold-booted with a biometric auth still pending from ' + secsAgo + 's ago — process was likely killed by the OS mid-authentication');
-    }
-    localStorage.removeItem('biometric-auth-pending');
-  } catch (e) {}
   pruneTrash();
   render();
   bindSwipe();
