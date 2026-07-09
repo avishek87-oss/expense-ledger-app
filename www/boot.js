@@ -111,13 +111,32 @@ function unlockGate() {
 // biometric prompt — when it finishes (success, failure, or cancel) and
 // control returns to the main Activity, Android fires a normal onResume,
 // which our own 'resume' listener (below) treats as "app came back from
-// background" and calls requireLock() again — relaunching the prompt in an
-// infinite loop. Guard against re-entering requireLock() while our own
-// auth flow is already in flight, so only a genuine background→foreground
-// transition (not our own AuthActivity returning) triggers a fresh check.
+// background" and calls requireLock() again. Guard against re-entering
+// requireLock() while our own auth flow is in flight or just settled, so
+// only a genuine background→foreground transition (not our own AuthActivity
+// returning) triggers a fresh check — see lastAuthSettledAt/RESUME_GUARD_MS
+// and the MAX_AUTO_RETRIES cap below for why a single boolean flag wasn't
+// enough on its own.
 let biometricAuthInFlight = false;
+// Wall-clock timestamp (not a setTimeout) so the guard survives the JS timer
+// throttling that happens while AuthActivity has focus and this WebView is
+// backgrounded — a scheduled setTimeout can fire late (or all at once,
+// batched, once we resume), which let spurious resumes slip through the old
+// fixed-delay guard and retrigger authenticate() automatically.
+let lastAuthSettledAt = 0;
+const RESUME_GUARD_MS = 4000;
+// Real-device logs (lock-diag2) showed dozens of automatic userCancel/
+// systemCancel cycles in rapid succession with no user input possible —
+// allowDeviceCredential:true means AuthActivity shows no cancel button at
+// all, so these could only be resume-triggered auto-retries, not taps.
+// Cap consecutive *automatic* (resume-triggered) attempts so a bad cycle
+// can never spin forever — after a couple of automatic failures, wait for
+// an explicit tap on the Unlock button instead of retrying on our own.
+let consecutiveAutoFailures = 0;
+const MAX_AUTO_RETRIES = 2;
 async function requireLock() {
   if (biometricAuthInFlight) return; // resume fired because our own AuthActivity just returned — not a real backgrounding
+  if (Date.now() - lastAuthSettledAt < RESUME_GUARD_MS) return; // same — belt-and-suspenders for the case above
   if (!(uiPrefs.lockEnabled ?? true)) return; // user turned it off in the hamburger menu
   // The @aparajita/capacitor-biometric-auth package registers its native plugin
   // as 'BiometricAuthNative' (see its index.js: registerPlugin('BiometricAuthNative', ...),
@@ -145,7 +164,7 @@ async function requireLock() {
     ', biometryType=' + check.biometryType + ', code=' + (check.code||'-') + ', reason=' + (check.reason||'-');
   logActivity('lock-diag2: checkBiometry isAvailable=' + check.isAvailable + ' deviceIsSecure=' + check.deviceIsSecure +
     ' biometryType=' + check.biometryType + ' code=' + (check.code||'-') + ' reason=' + (check.reason||'-'));
-  const attempt = async () => {
+  const attempt = async (auto) => {
     biometricAuthInFlight = true;
     // Marker for the cold-boot check at the top of boot(): if the process
     // gets killed while AuthActivity is in front, this is the only trace
@@ -172,21 +191,25 @@ async function requireLock() {
         androidSubtitle: 'Use your fingerprint, face, or device PIN',
       });
       unlockGate();
+      consecutiveAutoFailures = 0;
       try { localStorage.removeItem('biometric-auth-pending'); } catch (e) {}
     } catch (e) {
       // authentication failed/cancelled — gate stays up, user retries via the button
       try { localStorage.removeItem('biometric-auth-pending'); } catch (e2) {}
       const detail = (e && (e.code || e.message)) || String(e);
+      if (auto) {
+        consecutiveAutoFailures++;
+      } else {
+        consecutiveAutoFailures = 0; // an explicit tap always gets a fresh run of auto-retries afterward
+      }
       if (msgEl) msgEl.textContent = 'Diag: authenticate() failed — ' + detail;
-      logActivity('lock-diag2: authenticate() failed — ' + detail);
+      logActivity('lock-diag2: authenticate() failed — ' + detail + (auto ? ' (auto)' : ' (manual)'));
     } finally {
-      // Clear on a short delay, not immediately — the AuthActivity-triggered
-      // onResume can arrive a beat after this promise settles, and we need
-      // the guard to still be up when that spurious resume event lands.
-      setTimeout(() => { biometricAuthInFlight = false; }, 1500);
+      biometricAuthInFlight = false;
+      lastAuthSettledAt = Date.now();
     }
   };
-  if (btn) btn.onclick = attempt;
+  if (btn) btn.onclick = () => attempt(false);
   // Escape hatch: internalAuthenticate() can hang indefinitely on some devices
   // (the very "prompt never resolves" bug this lock flow has been fighting),
   // and the gate is a full-screen overlay with no other way back into the app
@@ -203,7 +226,14 @@ async function requireLock() {
   }
   hideLaunch();
   if (g) g.classList.remove('hidden');
-  await attempt();
+  if (consecutiveAutoFailures < MAX_AUTO_RETRIES) {
+    await attempt(true);
+  } else {
+    // Stop auto-retrying — wait for an explicit tap so a bad device/plugin
+    // interaction can't spin forever without the user ever choosing to retry.
+    if (msgEl) msgEl.textContent = 'Tap Unlock to try again.';
+    logActivity('lock-diag2: reached ' + MAX_AUTO_RETRIES + ' automatic failures in a row — waiting for a manual retry');
+  }
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
