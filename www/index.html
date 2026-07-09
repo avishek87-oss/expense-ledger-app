@@ -9,7 +9,7 @@
 <meta name="MobileOptimized" content="375">
 <meta name="theme-color" content="#171b21">
 <link rel="manifest" id="pwa-manifest">
-<title>Household Ledger</title>
+<title>Household Ledger</title>
 <link rel="stylesheet" href="style.css">
 <script>
 // Resolve theme before first paint so the splash/app render in the right theme (no flash).
@@ -74,6 +74,7 @@
   <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:var(--ink)">Household Ledger locked</div>
   <div id="lock-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:var(--ink-soft)">Unlock with your fingerprint, face, or device PIN to continue.</div>
   <button id="lock-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--bg);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Unlock</button>
+  <button id="lock-gate-skip" class="hidden" style="margin-top:18px;background:none;border:none;color:var(--muted);font-family:-apple-system,'Segoe UI',sans-serif;font-size:13px;text-decoration:underline;padding:8px">Trouble unlocking? Turn off lock and continue</button>
 </div>
 
 <div id="hdr">
@@ -276,7 +277,7 @@ window.addEventListener('unhandledrejection', function (ev) {
   var r = ev && ev.reason;
   window.onerror('unhandled promise: ' + ((r && (r.message || r.code)) || String(r)), '', 0, 0);
 });
-</script>
+</script>
 <script src="app-core.js"></script>
 <script src="auth-sync.js"></script>
 <script src="cc-payments.js"></script>
@@ -284,4 +285,4 @@ window.addEventListener('unhandledrejection', function (ev) {
 <script src="render.js"></script>
 <script src="boot.js"></script>
 </body>
-</html>
+</html>

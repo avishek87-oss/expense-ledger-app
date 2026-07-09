@@ -134,6 +134,7 @@ async function requireLock() {
   if (!check || (!check.isAvailable && !check.deviceIsSecure)) return; // nothing to authenticate against
   const g = document.getElementById('lock-gate');
   const btn = document.getElementById('lock-gate-btn');
+  const skipBtn = document.getElementById('lock-gate-skip');
   const msgEl = document.getElementById('lock-gate-msg');
   // TEMPORARY diagnostic — the "Unlock" button showed but tapping it did nothing
   // visible (no native prompt). Surface checkBiometry()'s actual result and any
@@ -186,6 +187,20 @@ async function requireLock() {
     }
   };
   if (btn) btn.onclick = attempt;
+  // Escape hatch: internalAuthenticate() can hang indefinitely on some devices
+  // (the very "prompt never resolves" bug this lock flow has been fighting),
+  // and the gate is a full-screen overlay with no other way back into the app
+  // — no path to the hamburger menu to turn Screen Lock off. Always offer a
+  // way out rather than risk a full, permanent lockout of the user's own data.
+  if (skipBtn) {
+    skipBtn.classList.remove('hidden');
+    skipBtn.onclick = () => {
+      uiPrefs.lockEnabled = false;
+      saveUI();
+      logActivity('lock-diag: user disabled Screen Lock via the lock screen escape hatch');
+      unlockGate();
+    };
+  }
   hideLaunch();
   if (g) g.classList.remove('hidden');
   await attempt();
@@ -260,16 +275,9 @@ async function boot() {
   const Splash = getNativePlugin('SplashScreen');
   if (Splash) { try { await Splash.hide(); } catch (e) {} }
 
-  // Start the version check now so its round trip overlaps with the
-  // biometric-auth wait below instead of stacking after it.
-  const versionInfoPromise = fetchVersionInfo();
-
-  // Biometric/device-credential lock — blocks until unlocked (no-op outside native shell).
-  await requireLock();
-
   // Fetch the update feed once; use it for both the native gate and the web update.
   launchStatus('Checking for updates…', 55);
-  const info = await versionInfoPromise;
+  const info = await fetchVersionInfo();
 
   // Mandatory native gate: installed APK too old for the current web bundle.
   if (info && info.minApk) {
@@ -277,13 +285,22 @@ async function boot() {
     if (nv && cmpVer(nv, info.minApk) < 0) { showApkGate(info.apkUrl || '', nv, info.minApk); return; }
   }
 
-  // Seamless web bundle update (may reload the app) — run this BEFORE the
-  // sign-in gate, so a signed-out/stuck-at-login device still always picks up
-  // the latest bundle instead of the update silently being skipped. Kept
-  // blocking (unlike the ledger data pull below) since it can replace and
-  // reload the running app — that must never happen as a surprise once the
-  // user is already looking at their ledger.
+  // Seamless web bundle update (may reload the app) — deliberately runs
+  // BEFORE requireLock() (moved here from before this check), not just before
+  // the sign-in gate. If a newer bundle exists, applyWebUpdate() can reload
+  // the whole app mid-flow; if that happened *during* the biometric prompt
+  // (which hands off to a separate native Android screen and waits on its
+  // result), the reload would kill that pending callback the same way an
+  // OS-level process kill would -- indistinguishable from the "prompt never
+  // resolves" bug this session spent a long time chasing. Running the update
+  // to completion first means a fresh boot() always starts the lock flow
+  // against a bundle that's already settled, and as a bonus, a bug in the
+  // *currently-running* bundle's lock flow can self-heal via this same update
+  // check instead of trapping the user behind it.
   await applyWebUpdate(info);
+
+  // Biometric/device-credential lock — blocks until unlocked (no-op outside native shell).
+  await requireLock();
 
   // Not signed in → login screen.
   if (IN_GAS && !(auth && auth.idToken)) { hideLaunch(); showLogin(true); return; }
@@ -311,4 +328,4 @@ document.addEventListener('visibilitychange', () => {
 (() => {
   const App = getNativePlugin('App');
   if (App && App.addListener) App.addListener('resume', () => { requireLock(); });
-})();
+})();

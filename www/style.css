@@ -271,6 +271,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 #apk-gate-btn:active{filter:brightness(1.25)}
 #lock-gate.hidden{display:none!important}
 #lock-gate-btn:active{filter:brightness(1.25)}
+#lock-gate-skip.hidden{display:none}
 /* Hamburger + drawer */
 #hmb{background:none;border:none;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;margin-right:2px;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent}
 .menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:350;display:flex;transition:background .28s ease}
@@ -410,4 +411,4 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 /* Payments tab */
 .pmth-total-row{display:flex;align-items:baseline;justify-content:space-between;padding:11px 0 5px;border-top:1px solid var(--line);margin-top:2px}
 .pmth-total-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
-.pmth-total-val{font-family:var(--mono);font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.pmth-total-val{font-family:var(--mono);font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
