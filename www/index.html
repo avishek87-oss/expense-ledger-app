@@ -3666,6 +3666,11 @@ async function requireLock() {
     ' biometryType=' + check.biometryType + ' code=' + (check.code||'-') + ' reason=' + (check.reason||'-'));
   const attempt = async () => {
     biometricAuthInFlight = true;
+    // Marker for the cold-boot check at the top of boot(): if the process
+    // gets killed while AuthActivity is in front, this is the only trace
+    // left behind, since nothing in JS memory (including this very promise)
+    // survives a process death.
+    try { localStorage.setItem('biometric-auth-pending', JSON.stringify({ at: Date.now() })); } catch (e) {}
     try {
       // The plugin's public `authenticate()` is a thin JS-side wrapper (in its
       // base.js) around the real native method, which is actually named
@@ -3686,8 +3691,10 @@ async function requireLock() {
         androidSubtitle: 'Use your fingerprint, face, or device PIN',
       });
       unlockGate();
+      try { localStorage.removeItem('biometric-auth-pending'); } catch (e) {}
     } catch (e) {
       // authentication failed/cancelled — gate stays up, user retries via the button
+      try { localStorage.removeItem('biometric-auth-pending'); } catch (e2) {}
       const detail = (e && (e.code || e.message)) || String(e);
       if (msgEl) msgEl.textContent = 'Diag: authenticate() failed — ' + detail;
       logActivity('lock-diag2: authenticate() failed — ' + detail);
@@ -3739,6 +3746,23 @@ async function boot() {
   loadUI();
   applyTheme();
   loadAuth();
+  // TEMPORARY diagnostic — the fingerprint/PIN prompt never resolves or
+  // rejects no matter what the user does in it, which points to Android
+  // killing the app process while the biometric flow's separate native
+  // screen is in front (a known Capacitor startActivityForResult gotcha).
+  // requireLock()'s attempt() writes a marker to localStorage right before
+  // launching that screen and clears it once the promise settles either
+  // way. If a fresh cold boot finds that marker still present, the process
+  // was killed mid-flow — this proves/disproves that theory directly,
+  // since nothing else could explain the app restarting with it still set.
+  try {
+    const pending = JSON.parse(localStorage.getItem('biometric-auth-pending') || 'null');
+    if (pending && pending.at) {
+      const secsAgo = Math.round((Date.now() - pending.at) / 1000);
+      logActivity('lock-diag3: app cold-booted with a biometric auth still pending from ' + secsAgo + 's ago — process was likely killed by the OS mid-authentication');
+    }
+    localStorage.removeItem('biometric-auth-pending');
+  } catch (e) {}
   pruneTrash();
   render();
   bindSwipe();
