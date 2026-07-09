@@ -44,8 +44,8 @@ if (Test-Path "$root\version.json") {
   } catch {}
 }
 
-# 1. Bump APP_VERSION in the web source
-$idx  = "$root\www\index.html"
+# 1. Bump APP_VERSION in the web source (lives in app-core.js since the file split)
+$idx  = "$root\www\app-core.js"
 $html = [IO.File]::ReadAllText($idx)
 $html = $html -replace "const APP_VERSION = '[^']+';", "const APP_VERSION = '$Version';"
 [IO.File]::WriteAllText($idx, $html, (New-Object Text.UTF8Encoding $false))
@@ -94,7 +94,7 @@ $vjson = [ordered]@{
 } | ConvertTo-Json
 [IO.File]::WriteAllText("$root\version.json", $vjson, (New-Object Text.UTF8Encoding $false))
 
-Invoke-Git add www/index.html version.json
+Invoke-Git add www version.json
 if ($Native) { Invoke-Git add android/app/build.gradle android/app/src/main/res }
 Invoke-Git commit -m "Release v$Version"
 Invoke-Git push
