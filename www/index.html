@@ -3644,6 +3644,16 @@ async function requireLock() {
   if (!check || (!check.isAvailable && !check.deviceIsSecure)) return; // nothing to authenticate against
   const g = document.getElementById('lock-gate');
   const btn = document.getElementById('lock-gate-btn');
+  const msgEl = document.getElementById('lock-gate-msg');
+  // TEMPORARY diagnostic — the "Unlock" button showed but tapping it did nothing
+  // visible (no native prompt). Surface checkBiometry()'s actual result and any
+  // authenticate() error directly on the lock screen (not just Activity) so we
+  // get an answer on the very next attempt, without another release+wait cycle.
+  // Remove once the real cause is found and fixed.
+  if (msgEl) msgEl.textContent = 'Diag: isAvailable=' + check.isAvailable + ', deviceIsSecure=' + check.deviceIsSecure +
+    ', biometryType=' + check.biometryType + ', code=' + (check.code||'-') + ', reason=' + (check.reason||'-');
+  logActivity('lock-diag2: checkBiometry isAvailable=' + check.isAvailable + ' deviceIsSecure=' + check.deviceIsSecure +
+    ' biometryType=' + check.biometryType + ' code=' + (check.code||'-') + ' reason=' + (check.reason||'-'));
   const attempt = async () => {
     try {
       await Bio.authenticate({
@@ -3656,6 +3666,9 @@ async function requireLock() {
       unlockGate();
     } catch (e) {
       // authentication failed/cancelled — gate stays up, user retries via the button
+      const detail = (e && (e.code || e.message)) || String(e);
+      if (msgEl) msgEl.textContent = 'Diag: authenticate() failed — ' + detail;
+      logActivity('lock-diag2: authenticate() failed — ' + detail);
     }
   };
   if (btn) btn.onclick = attempt;
