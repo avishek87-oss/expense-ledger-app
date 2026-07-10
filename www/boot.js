@@ -315,6 +315,16 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// Without this, two phones only converge on boot/resume — if both stay open
+// in the foreground (e.g. one adds a fixed item while the other is just
+// sitting on the ledger screen), the second phone never learns about the
+// change until it's backgrounded and reopened. pullFromSheets() already
+// no-ops when there's a pending/in-flight local push or the app is hidden,
+// so this is safe to fire on a plain interval.
+setInterval(() => {
+  if (IN_GAS && document.visibilityState === 'visible') pullFromSheets();
+}, 45000);
+
 // Re-lock every time the native app resumes from the background.
 (() => {
   const App = getNativePlugin('App');
