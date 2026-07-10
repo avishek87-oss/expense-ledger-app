@@ -26,7 +26,7 @@
 <body>
 
 <!-- Launch splash: first painted element, inline styles so it shows before the main stylesheet loads (seamless handoff from the native splash). -->
-<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);transition:opacity .45s ease">
+<div id="launch-overlay" style="position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);transition:opacity .45s ease">
   <div id="launch-logo" style="width:96px;height:96px">
     <svg viewBox="0 0 512 512" width="96" height="96" xmlns="http://www.w3.org/2000/svg">
       <rect width="512" height="512" rx="80" fill="#171b21"/>
@@ -47,7 +47,7 @@
 </div>
 
 <!-- Mandatory native-update gate (shown only when the installed APK is too old for the current web bundle). -->
-<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);padding:28px;text-align:center">
+<div id="apk-gate" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);padding:28px;text-align:center">
   <svg viewBox="0 0 512 512" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
     <rect width="512" height="512" rx="80" fill="#171b21"/>
     <rect x="130" y="110" width="252" height="292" rx="12" fill="#eef1f4"/>
@@ -59,12 +59,12 @@
   </svg>
   <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:var(--ink)">Update required</div>
   <div id="apk-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:var(--ink-soft)">A new version of the app is available. Please download and install it to continue.</div>
-  <button id="apk-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--bg);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
+  <button id="apk-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--cream);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Download update</button>
   <div id="apk-gate-ver" style="margin-top:16px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;letter-spacing:.05em;color:var(--faint)"></div>
 </div>
 
 <!-- Biometric/device-credential lock screen, shown on cold start and app resume. -->
-<div id="lock-gate" class="hidden" style="position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);padding:28px;text-align:center">
+<div id="lock-gate" class="hidden" style="position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);padding:28px;text-align:center">
   <svg viewBox="0 0 512 512" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
     <rect width="512" height="512" rx="80" fill="#171b21"/>
     <rect x="176" y="220" width="160" height="140" rx="14" fill="#eef1f4"/>
@@ -73,7 +73,7 @@
   </svg>
   <div style="margin-top:22px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:21px;font-weight:700;color:var(--ink)">Household Ledger locked</div>
   <div id="lock-gate-msg" style="margin-top:10px;max-width:300px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;color:var(--ink-soft)">Unlock with your fingerprint, face, or device PIN to continue.</div>
-  <button id="lock-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--bg);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Unlock</button>
+  <button id="lock-gate-btn" style="margin-top:26px;background:var(--ink);color:var(--cream);border:none;border-radius:10px;padding:15px 30px;font-family:-apple-system,'Segoe UI',sans-serif;font-size:16px;font-weight:600;min-height:54px">Unlock</button>
   <button id="lock-gate-skip" class="hidden" style="margin-top:18px;background:none;border:none;color:var(--muted);font-family:-apple-system,'Segoe UI',sans-serif;font-size:13px;text-decoration:underline;padding:8px">Trouble unlocking? Turn off lock and continue</button>
 </div>
 
@@ -102,6 +102,12 @@
       <button id="today-jump" class="today-jump hidden" onclick="jumpToday()">Today</button>
     </div>
   </div>
+</div>
+
+<div id="sync-fail-banner" class="hidden" role="alert">
+  <span id="sync-fail-msg">Couldn't save to Sheets — will keep retrying</span>
+  <button id="sync-fail-retry" onclick="retrySyncNow()">Retry now</button>
+  <button id="sync-fail-dismiss" onclick="dismissSyncFailBanner()" aria-label="Dismiss">✕</button>
 </div>
 
 <main>

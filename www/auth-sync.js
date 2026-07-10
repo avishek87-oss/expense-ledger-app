@@ -79,6 +79,30 @@ let pushDirty = false;   // a save happened while a push was in flight
 let pushBusy  = false;
 let lastPullAt = 0;
 
+// Header sync-dot alone is too easy to miss — a push that keeps failing means
+// a real, silently-lost edit (this is exactly how a fixed item added on one
+// phone got wiped out before either of you noticed). Surface a banner once a
+// failure repeats, not on the first blip (a single transient hiccup that
+// self-heals on the next save shouldn't interrupt anyone).
+let consecutivePushFailures = 0;
+const SYNC_FAIL_BANNER_THRESHOLD = 2;
+let syncFailBannerDismissed = false;
+
+function updateSyncFailBanner() {
+  const el = document.getElementById('sync-fail-banner');
+  if (!el) return;
+  const show = consecutivePushFailures >= SYNC_FAIL_BANNER_THRESHOLD && !syncFailBannerDismissed;
+  el.classList.toggle('hidden', !show);
+}
+function dismissSyncFailBanner() {
+  syncFailBannerDismissed = true;
+  updateSyncFailBanner();
+}
+function retrySyncNow() {
+  syncFailBannerDismissed = false;
+  pushToSheets();
+}
+
 // Bounds how long a GAS round trip can hang (e.g. a cold Apps Script
 // container) instead of relying on the browser's much longer default timeout.
 function fetchWithTimeout(url, opts, ms) {
@@ -137,9 +161,18 @@ async function pushToSheets() {
       return res.json();
     });
     setSyncState(j && j.ok ? 'ok' : 'err');
-    if (j && j.ok) setPendingSync(false);
+    if (j && j.ok) {
+      setPendingSync(false);
+      consecutivePushFailures = 0;
+      syncFailBannerDismissed = false;
+    } else {
+      consecutivePushFailures++;
+    }
+    updateSyncFailBanner();
   } catch (e) {
     setSyncState('err'); // offline or GAS unreachable — data is safe locally
+    consecutivePushFailures++;
+    updateSyncFailBanner();
   }
   pushBusy = false;
   if (pushDirty) { pushDirty = false; scheduleSync(); }
@@ -178,4 +211,4 @@ function setSyncState(s) {
   dot.className = s==='ok'?'ok':s==='busy'?'busy':(s==='err'||s==='offline')?'err':'ok';
   lbl.textContent = s==='ok'?'Synced':s==='busy'?'Syncing…':s==='err'?'Error':s==='offline'?'Offline':'Saved';
 }
-
+

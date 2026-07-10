@@ -1,41 +1,65 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#eef1f4; --card:#ffffff; --card-2:#f4f6f8;
-  --ink:#171b21; --ink-soft:#3b4453;
-  --muted:#6b7684; --faint:#a7b0ba;
-  --border:#dde2e7; --line:#e8ebee;
-  --maroon:#b8433c; --maroon-soft:#d99b96;
-  --green:#2f7a5c; --green-soft:#8fbfa8;
-  --cream:#eef1f4;
-  --accent:#3452c0; --accent-soft:#9fb0e0;
-  /* semantic surfaces — the hero stays a dark feature panel in both themes */
-  --hero-bg:#171b21; --hero-fg:#eef1f4;
-  --input-bg:#ffffff; --hdr-bg:rgba(238,241,244,.92); --due-amber:#a9782f;
-  --serif:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  /* Corkboard: pinned index cards + washi tape, color-coded by person */
+  --bg:#8B6A45; --card:#FFFCF3; --card-2:#F3ECD8;
+  --ink:#2E2A22; --ink-soft:#5B5240;
+  --muted:#786e56; --faint:#786e56;
+  --border:#E7DFC8; --line:#EDE6D2;
+  --maroon:#B23A2C; --maroon-soft:#d99b96;
+  --green:#4C7A5E; --green-soft:#8fbfa8;
+  --cream:#FFFCF3;
+  --accent:#4E6E93; --accent-soft:#9fb0e0;
+  /* the hero stays a dark feature panel in both themes — reads as a small
+     chalkboard pinned to the board, not a navy fintech card */
+  --hero-bg:#221a10; --hero-fg:#eef1f4;
+  --input-bg:#FFFCF3; --hdr-bg:rgba(255,252,243,.92); --due-amber:#8f6527;
+  --pin-metal:#C9C6BC; --pin-metal-2:#8C897E; --card-shadow:rgba(40,28,10,.28);
+  --oncork:#FFFCF3; /* readable label color for text sitting directly on the cork bg, not a card */
+  /* per-person tape colors, applied to section headers via [data-sec] */
+  --tape-neha:#C98CA0; --tape-neha-ink:#3E1F29;
+  --tape-avishek:#6E8FB5; --tape-avishek-ink:#1D2E42;
+  --tape-aavia:#E3B94D; --tape-aavia-ink:#3D2E0C;
+  --tape-shared:#7FA88C; --tape-shared-ink:#1F3B2C;
+  --serif:'Segoe UI Black','Arial Black','Helvetica Neue',sans-serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
   --shadow:0 1px 2px rgba(20,30,50,.04),0 6px 20px rgba(20,30,50,.06);
-  --radius:10px;
+  --radius:3px;
   /* layout heights for sticky toolbar positioning */
   --header-sticky-height:70px;--tabbar-height:52px;--month-nav-height:68px;
   --toolbar-top:calc(var(--header-sticky-height) + var(--tabbar-height) + var(--month-nav-height));
 }
 body.no-month-nav{--toolbar-top:calc(var(--header-sticky-height) + var(--tabbar-height));}
 :root[data-theme="dark"]{
-  --bg:#0f1216; --card:#191d24; --card-2:#222833;
-  --ink:#e7ebf0; --ink-soft:#b7c0cc;
-  --muted:#8b95a3; --faint:#5c6675;
-  --border:#2b323d; --line:#232a33;
-  --maroon:#e28078; --maroon-soft:#7d3b36;
-  --green:#5fb492; --green-soft:#315a48;
-  --cream:#0f1216;
-  --accent:#7d93ec; --accent-soft:#3c4a78;
-  --hero-bg:#20263a; --hero-fg:#eef1f4;
-  --input-bg:#222833; --hdr-bg:rgba(15,18,22,.92); --due-amber:#d6a95a;
+  /* corkboard at night — dark cork, lamp-lit cards */
+  --bg:#241D14; --card:#2A2318; --card-2:#332B1D;
+  --ink:#EFE7D6; --ink-soft:#B9AE95;
+  --muted:#9c9077; --faint:#9c9077;
+  --border:#3C3222; --line:#463A26;
+  --maroon:#E0665A; --maroon-soft:#7d3b36;
+  --green:#8FBFA0; --green-soft:#315a48;
+  --cream:#241D14;
+  --accent:#8FAAD0; --accent-soft:#3c4a78;
+  --hero-bg:#160f09; --hero-fg:#eef1f4;
+  --input-bg:#2A2318; --hdr-bg:rgba(42,35,24,.92); --due-amber:#d6a95a;
+  --pin-metal:#8B8B82; --pin-metal-2:#5C5A52; --card-shadow:rgba(0,0,0,.5);
+  --tape-neha:#A96C82; --tape-neha-ink:#F3E2E8;
+  --tape-avishek:#5A7CA3; --tape-avishek-ink:#E3EAF3;
+  --tape-aavia:#B6923B; --tape-aavia-ink:#3D2E0C;
+  --tape-shared:#5F8C74; --tape-shared-ink:#DDEDE3;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4);
 }
 html{-webkit-text-size-adjust:100%}
-body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+body{
+  font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;
+  background-image:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--bg) 55%, black) 0 1.6px, transparent 2.6px),
+    radial-gradient(circle at 68% 22%, color-mix(in srgb, var(--bg) 60%, black) 0 1.3px, transparent 2.4px),
+    radial-gradient(circle at 30% 55%, color-mix(in srgb, var(--bg) 50%, black) 0 1.6px, transparent 2.6px),
+    radial-gradient(circle at 85% 70%, color-mix(in srgb, var(--bg) 55%, black) 0 1.4px, transparent 2.4px),
+    radial-gradient(circle at 45% 88%, color-mix(in srgb, var(--bg) 45%, black) 0 1.2px, transparent 2.2px);
+  background-size:140px 140px,160px 160px,130px 130px,150px 150px,170px 170px;
+}
 input,select,button{font-family:inherit;-webkit-appearance:none}
 /* 16px minimum on all text inputs/selects prevents Android auto-zoom on focus */
 input:not([type=checkbox]),select,textarea{font-size:16px}
@@ -58,10 +82,29 @@ button{color:inherit}
 #undo-btn.hidden{display:none}
 #undo-count{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted)}
 
+/* ── Sync failure banner ── */
+#sync-fail-banner{position:sticky;top:0;z-index:110;display:flex;align-items:center;gap:10px;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));background:var(--maroon);color:var(--cream);font-family:var(--sans);font-size:13px;font-weight:600}
+#sync-fail-banner.hidden{display:none}
+#sync-fail-msg{flex:1}
+#sync-fail-retry{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:var(--cream);border-radius:999px;padding:6px 12px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;min-height:32px;-webkit-tap-highlight-color:transparent}
+#sync-fail-retry:hover{background:rgba(255,255,255,.28)}
+#sync-fail-dismiss{background:none;border:none;color:var(--cream);font-size:15px;cursor:pointer;padding:4px 6px;min-height:32px;min-width:32px;-webkit-tap-highlight-color:transparent;opacity:.85}
+#sync-fail-dismiss:hover{opacity:1}
+
 /* ── Tabs ── */
-#tab-bar{display:flex;gap:2px;margin-top:12px}
-.tab-btn{flex:0 0 auto;padding:9px 2px 10px;margin-right:22px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s;font-weight:600}
-.tab-btn.active{color:var(--ink);border-bottom-color:var(--accent)}
+/* Tape strips instead of underlined pills — the active one peels forward */
+#tab-bar{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+.tab-btn{
+  flex:0 0 auto;padding:8px 13px;margin-right:0;border:none;border-radius:0;
+  font-family:var(--serif);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:900;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .15s;
+  background:color-mix(in srgb, var(--card-2) 55%, var(--bg));color:var(--ink);
+  box-shadow:0 3px 6px rgba(0,0,0,.2);transform:translateY(3px) rotate(-.6deg);
+}
+.tab-btn:nth-child(2){transform:translateY(3px) rotate(.5deg)}
+.tab-btn:nth-child(3){transform:translateY(3px) rotate(-.4deg)}
+.tab-btn:nth-child(4){transform:translateY(3px) rotate(.6deg)}
+.tab-btn.active{background:var(--tape-shared);color:var(--tape-shared-ink);transform:translateY(0) rotate(0);box-shadow:0 5px 10px rgba(0,0,0,.28)}
 
 /* ── Month nav ── */
 #month-nav{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0}
@@ -77,8 +120,15 @@ button{color:inherit}
 main{max-width:1140px;margin:0 auto;padding:16px 16px 96px;flex:1;width:100%;display:flex;flex-direction:column}
 
 /* ── Hero ── */
-.hero{background:var(--hero-bg);color:var(--hero-fg);border-radius:14px;padding:22px 22px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.hero::after{content:"";position:absolute;top:0;right:0;width:180px;height:180px;background:radial-gradient(circle at top right,rgba(255,255,255,.06),transparent 70%);pointer-events:none}
+/* Reads as a small chalkboard pinned to the corkboard, not a fintech card */
+.hero{background:var(--hero-bg);color:var(--hero-fg);border-radius:2px;padding:26px 22px 18px;box-shadow:0 8px 18px var(--card-shadow);position:relative;overflow:visible;transform:rotate(-.5deg)}
+.hero::after{content:"";position:absolute;top:0;right:0;width:180px;height:180px;background:radial-gradient(circle at top right,rgba(255,255,255,.06),transparent 70%);pointer-events:none;border-radius:2px;overflow:hidden}
+.hero::before{
+  content:""; position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+  width:16px; height:16px; border-radius:50%;
+  background:radial-gradient(circle at 32% 28%, #fff8, transparent 45%), radial-gradient(circle at 60% 65%, var(--pin-metal-2), var(--pin-metal) 70%);
+  box-shadow:0 3px 4px rgba(0,0,0,.35); z-index:3;
+}
 .hero-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .hero-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:rgba(247,244,236,.6);font-weight:600}
 .hero-num{font-family:var(--mono);font-size:36px;font-weight:600;letter-spacing:-0.02em;margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
@@ -105,21 +155,41 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px;flex:1;width:100%;dis
 
 /* ── Toolbar ── */
 .toolbar{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:16px 4px 4px;position:sticky;top:var(--toolbar-top);background:var(--bg);z-index:99;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
-.tbtn{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;font-weight:600;transition:color .15s}
-.tbtn:hover{color:var(--ink)}
+.tbtn{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--oncork);background:none;border:none;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;font-weight:600;transition:text-decoration-color .15s;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
+.tbtn:hover{text-decoration-color:currentColor}
 
 /* ── Section grid ── */
 #sections{display:flex;flex-direction:column;gap:14px;margin-top:6px}
 
 /* ── Card ── */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
-.card-hd{width:100%;display:flex;align-items:center;gap:12px;padding:18px 18px;background:none;border:none;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent}
+/* Pinned index card: sharp corners, a pin at top-center, alternating tilt so
+   the board doesn't look mechanically uniform */
+.card{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 18px var(--card-shadow);overflow:visible;margin-top:12px;transform:rotate(-.6deg)}
+#sections .card:nth-of-type(even){transform:rotate(.5deg)}
+.card::before{
+  content:""; position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+  width:16px; height:16px; border-radius:50%;
+  background:radial-gradient(circle at 32% 28%, #fff8, transparent 45%), radial-gradient(circle at 60% 65%, var(--pin-metal-2), var(--pin-metal) 70%);
+  box-shadow:0 3px 4px rgba(0,0,0,.35); z-index:3;
+}
+.card-hd{width:100%;display:flex;align-items:center;gap:12px;padding:24px 18px 18px;background:none;border:none;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent;overflow:hidden;border-radius:var(--radius)}
 .card-hd.static{cursor:default}
 .chev{font-size:22px;color:var(--faint);line-height:1;flex-shrink:0;transition:transform .25s ease;width:14px;text-align:center}
 .card.open .chev{transform:rotate(90deg);color:var(--muted)}
 .hd-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.hd-title{font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:-0.01em}
-.hd-sub{display:flex;align-items:center;gap:8px}
+/* Washi-tape label — color coded by who the section belongs to */
+.hd-title{
+  display:inline-block; align-self:flex-start;
+  font-family:var(--serif); font-size:11px; font-weight:900; letter-spacing:.04em; text-transform:uppercase;
+  padding:5px 10px; border-radius:1px; box-shadow:0 2px 5px rgba(0,0,0,.18);
+  background:var(--tape-shared); color:var(--tape-shared-ink);
+  transform:rotate(-1deg);
+}
+.card[data-sec="neha"] .hd-title{background:var(--tape-neha);color:var(--tape-neha-ink);transform:rotate(1deg)}
+.card[data-sec="avishek"] .hd-title{background:var(--tape-avishek);color:var(--tape-avishek-ink);transform:rotate(-1.2deg)}
+.card[data-sec="aavia"] .hd-title{background:var(--tape-aavia);color:var(--tape-aavia-ink);transform:rotate(.8deg)}
+.card[data-sec="household"] .hd-title,.card[data-sec="fixed"] .hd-title,.card[data-sec="maids"] .hd-title{background:var(--tape-shared);color:var(--tape-shared-ink)}
+.hd-sub{display:flex;align-items:center;gap:8px;margin-top:2px}
 .tag-due{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--maroon)}
 .tag-ok{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--green);display:flex;align-items:center;gap:4px}
 .tag-ok::before{content:"✓";font-size:11px}
@@ -152,11 +222,21 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px;flex:1;width:100%;dis
 .pbtn{font-family:var(--sans);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:9px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;min-height:44px;-webkit-tap-highlight-color:transparent;transition:background .15s,color .15s,border-color .15s}
 .pbtn.due{border:1px solid var(--maroon);background:transparent;color:var(--maroon)}
 .pbtn.due:hover{background:var(--maroon);color:var(--cream)}
-.pbtn.paid{border:1px solid var(--green);background:var(--green);color:var(--cream)}
-.pbtn.paid:hover{filter:brightness(1.1)}
+/* Signature move: paid items look like a strip of washi tape stuck down,
+   not a generic pill — diagonal weave texture + a slight stuck-on tilt */
+.pbtn.paid{
+  border:none; color:var(--cream); border-radius:2px;
+  background:repeating-linear-gradient(115deg, var(--green), var(--green) 6px, color-mix(in srgb, var(--green) 85%, white) 6px, color-mix(in srgb, var(--green) 85%, white) 7px);
+  box-shadow:0 2px 5px rgba(0,0,0,.22); transform:rotate(-1.5deg);
+}
+.pbtn.paid:hover{filter:brightness(1.08)}
 .pbtn.sm{font-size:11px;padding:8px 13px;min-height:40px}
-.pbtn.act{border:1px solid var(--green);background:var(--green);color:var(--cream)}
-.pbtn.act:hover{filter:brightness(1.1)}
+.pbtn.act{
+  border:none;color:var(--cream);border-radius:2px;
+  background:repeating-linear-gradient(115deg, var(--green), var(--green) 6px, color-mix(in srgb, var(--green) 85%, white) 6px, color-mix(in srgb, var(--green) 85%, white) 7px);
+  box-shadow:0 2px 5px rgba(0,0,0,.22);
+}
+.pbtn.act:hover{filter:brightness(1.08)}
 
 /* ── Stepper ── */
 .field{display:flex;align-items:center;gap:10px}
@@ -167,10 +247,11 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px;flex:1;width:100%;dis
 .sval{font-family:var(--mono);font-size:17px;min-width:30px;text-align:center;font-variant-numeric:tabular-nums}
 
 /* ── Date chips ── */
+/* Punched like a library card catalog — a hole per day, filled when attended */
 .chips{display:flex;flex-wrap:wrap;gap:7px;padding:0 0 14px}
-.chip{width:42px;height:42px;font-family:var(--mono);font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card-2);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
+.chip{width:36px;height:36px;font-family:var(--mono);font-size:11px;border-radius:50%;border:1.5px solid var(--faint);background:var(--card-2);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s;box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}
 .chip:hover{border-color:var(--ink)}
-.chip.on{border-color:var(--ink);background:var(--ink);color:var(--cream);font-weight:600}
+.chip.on{border-color:var(--accent);background:var(--card);color:var(--ink);font-weight:700;box-shadow:none}
 
 /* ── Sub-section label ── */
 .sublbl{font-family:var(--sans);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;padding:16px 0 4px;border-top:1px solid var(--line)}
@@ -236,7 +317,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px 96px;flex:1;width:100%;dis
 .empty-state .msg{font-family:var(--serif);font-size:18px;color:var(--ink);margin-top:14px}
 .empty-state .sub{font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:6px}
 
-footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--faint);padding:32px 0 8px;letter-spacing:.02em;margin-top:auto}
+footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--oncork);padding:32px 0 8px;letter-spacing:.02em;margin-top:auto}
 
 /* ══ Responsive ══ */
 @media (min-width:720px){
@@ -277,7 +358,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--fain
 .menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:350;display:flex;transition:background .28s ease}
 .menu-overlay.hidden{display:none}
 .menu-overlay.open{background:rgba(0,0,0,.4)}
-#menu-panel{background:var(--bg);width:88%;max-width:400px;height:100%;overflow-y:auto;box-shadow:2px 0 24px rgba(31,42,36,.18);display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+#menu-panel{background:var(--card);width:88%;max-width:400px;height:100%;overflow-y:auto;box-shadow:2px 0 24px rgba(31,42,36,.18);display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
 .menu-overlay.open #menu-panel{transform:translateX(0)}
 #menu-bar{position:sticky;top:0;background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);z-index:1}
 #menu-title{font-family:var(--serif);font-size:18px;font-weight:600}
