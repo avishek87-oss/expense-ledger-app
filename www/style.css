@@ -1,25 +1,26 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  /* Corkboard: pinned index cards + washi tape, color-coded by person */
-  --bg:#8B6A45; --card:#FFFCF3; --card-2:#F3ECD8;
-  --ink:#2E2A22; --ink-soft:#5B5240;
-  --muted:#786e56; --faint:#786e56;
-  --border:#E7DFC8; --line:#EDE6D2;
-  --maroon:#B23A2C; --maroon-soft:#d99b96;
-  --green:#4C7A5E; --green-soft:#8fbfa8;
-  --cream:#FFFCF3;
-  --accent:#4E6E93; --accent-soft:#9fb0e0;
+  /* Cloud Dancer: Pantone Color of the Year 2026 — soft cream + powder blue,
+     same pinned-card/tape structure as before, calmer mood */
+  --bg:#F1EEE6; --card:#FFFFFF; --card-2:#F6F3EC;
+  --ink:#33383F; --ink-soft:#565C66;
+  --muted:#666B73; --faint:#5E636B;
+  --border:#E3DFD5; --line:#ECE8DE;
+  --maroon:#A8483E; --maroon-soft:#d9b0ab;
+  --green:#4F7359; --green-soft:#a8c4ae;
+  --cream:#FFFFFF;
+  --accent:#4A6E96; --accent-soft:#B7CEE5;
   /* the hero stays a dark feature panel in both themes — reads as a small
-     chalkboard pinned to the board, not a navy fintech card */
-  --hero-bg:#221a10; --hero-fg:#eef1f4;
-  --input-bg:#FFFCF3; --hdr-bg:rgba(255,252,243,.92); --due-amber:#8f6527;
-  --pin-metal:#C9C6BC; --pin-metal-2:#8C897E; --card-shadow:rgba(40,28,10,.28);
-  --oncork:#FFFCF3; /* readable label color for text sitting directly on the cork bg, not a card */
+     slate pinned to the board, not a navy fintech card */
+  --hero-bg:#2B333D; --hero-fg:#eef1f4;
+  --input-bg:#FFFFFF; --hdr-bg:rgba(255,255,255,.88); --due-amber:#8f6527;
+  --pin-metal:#C9C6BC; --pin-metal-2:#8C897E; --card-shadow:rgba(40,44,56,.14);
+  --oncork:#5E636B; /* readable label color for text sitting directly on the page bg, not a card */
   /* per-person tape colors, applied to section headers via [data-sec] */
-  --tape-neha:#C98CA0; --tape-neha-ink:#3E1F29;
-  --tape-avishek:#6E8FB5; --tape-avishek-ink:#1D2E42;
-  --tape-aavia:#E3B94D; --tape-aavia-ink:#3D2E0C;
-  --tape-shared:#7FA88C; --tape-shared-ink:#1F3B2C;
+  --tape-neha:#E8C9D2; --tape-neha-ink:#5C2A38;
+  --tape-avishek:#B7CEE5; --tape-avishek-ink:#1F3A57;
+  --tape-aavia:#EEDDAE; --tape-aavia-ink:#5A4310;
+  --tape-shared:#C3D9C7; --tape-shared-ink:#234A2C;
   --serif:'Segoe UI Black','Arial Black','Helvetica Neue',sans-serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
@@ -31,34 +32,36 @@
 }
 body.no-month-nav{--toolbar-top:calc(var(--header-sticky-height) + var(--tabbar-height));}
 :root[data-theme="dark"]{
-  /* corkboard at night — dark cork, lamp-lit cards */
-  --bg:#241D14; --card:#2A2318; --card-2:#332B1D;
-  --ink:#EFE7D6; --ink-soft:#B9AE95;
-  --muted:#9c9077; --faint:#9c9077;
-  --border:#3C3222; --line:#463A26;
-  --maroon:#E0665A; --maroon-soft:#7d3b36;
-  --green:#8FBFA0; --green-soft:#315a48;
-  --cream:#241D14;
-  --accent:#8FAAD0; --accent-soft:#3c4a78;
-  --hero-bg:#160f09; --hero-fg:#eef1f4;
-  --input-bg:#2A2318; --hdr-bg:rgba(42,35,24,.92); --due-amber:#d6a95a;
-  --pin-metal:#8B8B82; --pin-metal-2:#5C5A52; --card-shadow:rgba(0,0,0,.5);
-  --tape-neha:#A96C82; --tape-neha-ink:#F3E2E8;
-  --tape-avishek:#5A7CA3; --tape-avishek-ink:#E3EAF3;
-  --tape-aavia:#B6923B; --tape-aavia-ink:#3D2E0C;
-  --tape-shared:#5F8C74; --tape-shared-ink:#DDEDE3;
+  /* Cloud Dancer at dusk — soft slate sky instead of stark black */
+  --bg:#232830; --card:#2B313B; --card-2:#333A45;
+  --ink:#EDEFF1; --ink-soft:#C7CCD3;
+  --muted:#A4AAB4; --faint:#A4AAB4;
+  --border:#3B4149; --line:#343A42;
+  --maroon:#E08A7D; --maroon-soft:#7d4d46;
+  --green:#9CC9AD; --green-soft:#3a5a44;
+  --cream:#232830;
+  --accent:#9CBBE0; --accent-soft:#3c5372;
+  --hero-bg:#171B21; --hero-fg:#eef1f4;
+  --input-bg:#2B313B; --hdr-bg:rgba(43,49,59,.9); --due-amber:#d6a95a;
+  --pin-metal:#8B8B82; --pin-metal-2:#5C5A52; --card-shadow:rgba(0,0,0,.4);
+  --oncork:#EDEFF1;
+  --tape-neha:#5C3540; --tape-neha-ink:#F3E0E6;
+  --tape-avishek:#3E5876; --tape-avishek-ink:#D7E6F5;
+  --tape-aavia:#5C4A22; --tape-aavia-ink:#F5E9C8;
+  --tape-shared:#35503C; --tape-shared-ink:#DCEEDF;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4);
 }
 html{-webkit-text-size-adjust:100%}
 body{
   font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;
+  /* soft cloud blooms instead of the cork speckle — literal callback to the
+     Cloud Dancer reference image's sky background */
   background-image:
-    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--bg) 55%, black) 0 1.6px, transparent 2.6px),
-    radial-gradient(circle at 68% 22%, color-mix(in srgb, var(--bg) 60%, black) 0 1.3px, transparent 2.4px),
-    radial-gradient(circle at 30% 55%, color-mix(in srgb, var(--bg) 50%, black) 0 1.6px, transparent 2.6px),
-    radial-gradient(circle at 85% 70%, color-mix(in srgb, var(--bg) 55%, black) 0 1.4px, transparent 2.4px),
-    radial-gradient(circle at 45% 88%, color-mix(in srgb, var(--bg) 45%, black) 0 1.2px, transparent 2.2px);
-  background-size:140px 140px,160px 160px,130px 130px,150px 150px,170px 170px;
+    radial-gradient(ellipse 340px 160px at 8% 6%, color-mix(in srgb, var(--accent-soft) 32%, transparent), transparent 70%),
+    radial-gradient(ellipse 300px 150px at 82% 14%, color-mix(in srgb, var(--card) 55%, transparent), transparent 70%),
+    radial-gradient(ellipse 380px 180px at 20% 92%, color-mix(in srgb, var(--accent-soft) 26%, transparent), transparent 70%),
+    radial-gradient(ellipse 260px 140px at 90% 85%, color-mix(in srgb, var(--card) 50%, transparent), transparent 70%);
+  background-repeat:no-repeat;
 }
 input,select,button{font-family:inherit;-webkit-appearance:none}
 /* 16px minimum on all text inputs/selects prevents Android auto-zoom on focus */
