@@ -84,8 +84,6 @@ let currentMonth = todayMonthKey();
 let currentTab = 'home';
 let syncTimer = null;
 let uiPrefs = { collapsed: {} };
-let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
-let miscDrafts = {};
 let pendingPay = null;
 let pendingCcPay = null; // { cardKey, cycleKey } while the CC pay sheet is open
 let pendingNehaXfer = null; // { direction } while the Neha transfer sheet is open
@@ -575,14 +573,10 @@ function shiftMonth(d) {
   const next = addMonths(currentMonth, d);
   if (next < navMinMonth() || next > todayMonthKey()) return;
   currentMonth = next;
-  gDraft = { vendor:'Sagar', category:'veges', amount:'' };
-  miscDrafts = {};
   render();
 }
 function jumpToday() {
   currentMonth = todayMonthKey();
-  gDraft = { vendor:'Sagar', category:'veges', amount:'' };
-  miscDrafts = {};
   render();
 }
 
@@ -648,33 +642,15 @@ function toggleCustomClassDate(key, day) {
 }
 
 // ── Grocery ────────────────────────────────────────────────────────────────
-function captureGroceryDraft() {
-  const v=document.getElementById('g-vendor'); if(v) gDraft.vendor=v.value;
-  const c=document.getElementById('g-cat');    if(c) gDraft.category=c.value;
-  const a=document.getElementById('g-amt');    if(a) gDraft.amount=a.value;
-  const d=document.getElementById('g-date');   if(d) gDraft.date=d.value;
-}
-function addGrocery() {
-  captureGroceryDraft();
-  const amt = Number(gDraft.amount);
-  if (!amt) return;
-  const date = gDraft.date || today();
-  const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
-  const tmd = getMDFor(mk);
-  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date, paid:false };
-  gDraft.amount=''; gDraft.date='';
-  updateMonthFor(mk, { groceries:[...(tmd.groceries||[]),entry] }, `added ₹${amt} groceries (${entry.vendor})`);
-}
+function clampMonth(mk) { return (mk && mk >= MIN_MONTH) ? mk : MIN_MONTH; }
 function toggleGroceryPaid(i) {
   // Only called to UNMARK; marking goes through startPayment
-  captureGroceryDraft();
   const md = getMD();
   const item = (md.groceries||[])[i];
   updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
     item && `unmarked ₹${item.amount} groceries (${item.vendor}) as paid`);
 }
 function deleteGrocery(i) {
-  captureGroceryDraft();
   const md = getMD();
   const item = (md.groceries||[])[i];
   if (item) moveToTrash({ kind:'month', mk: currentMonth, cat:'groceries', item });
@@ -682,34 +658,14 @@ function deleteGrocery(i) {
 }
 
 // ── Misc items ─────────────────────────────────────────────────────────────
-function captureMiscDraft(cat) {
-  const t=document.getElementById(`m-txt-${cat}`); if(t){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].text=t.value; }
-  const a=document.getElementById(`m-amt-${cat}`); if(a){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].amount=a.value; }
-  const d=document.getElementById(`m-date-${cat}`); if(d){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].date=d.value; }
-}
-function clampMonth(mk) { return (mk && mk >= MIN_MONTH) ? mk : MIN_MONTH; }
-function addMiscItem(cat) {
-  captureMiscDraft(cat);
-  const d = miscDrafts[cat] || {};
-  const text = (d.text||'').trim();
-  const amt  = Number(d.amount||0);
-  if (!text || !amt) return;
-  const date = d.date || today();
-  const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
-  const tmd = getMDFor(mk);
-  miscDrafts[cat] = { text:'', amount:'', date:'' };
-  updateMonthFor(mk, { [cat]:[...(tmd[cat]||[]),{ text, amount:amt, paid:false, date }] }, `added ₹${amt} ${cat} (${text})`);
-}
 function toggleMiscPaid(cat,i) {
   // Only called to UNMARK; marking goes through startPayment
-  captureMiscDraft(cat);
   const md = getMD();
   const item = (md[cat]||[])[i];
   updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
     item && `unmarked ₹${item.amount} ${cat} (${item.text}) as paid`);
 }
 function deleteMiscItem(cat,i) {
-  captureMiscDraft(cat);
   const md = getMD();
   const item = (md[cat]||[])[i];
   if (item) moveToTrash({ kind:'month', mk: currentMonth, cat, item });

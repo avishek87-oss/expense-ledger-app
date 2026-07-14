@@ -93,13 +93,7 @@ function byDateDesc(items) {
 }
 function miscItemList(cat, items) {
   const total = (items||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-  const d = miscDrafts[cat]||{};
-  let html = `<div class="misc-add">
-    <input id="m-txt-${cat}" class="misc-txt" type="text" placeholder="what for" value="${esc(d.text||'')}" oninput="captureMiscDraft('${cat}')">
-    <input id="m-amt-${cat}" class="misc-amt" type="number" inputmode="numeric" placeholder="amount" value="${esc(d.amount||'')}" oninput="captureMiscDraft('${cat}')">
-    <input id="m-date-${cat}" class="misc-date" type="date" value="${esc(d.date||today())}" onchange="captureMiscDraft('${cat}')" title="Spend date">
-    <button class="add-btn" onclick="addMiscItem('${cat}')">Add</button>
-  </div>`;
+  let html = '';
   if ((items||[]).length) {
     html += byDateDesc(items).map(({it,i})=>`
     <div class="mitem" data-cat="${cat}" data-idx="${i}">
@@ -116,6 +110,8 @@ function miscItemList(cat, items) {
         <button class="del-btn" onclick="deleteMiscItem('${cat}',${i})" aria-label="delete">×</button>
       </div>
     </div>`).join('');
+  } else {
+    html += `<div class="cc-empty">Nothing yet — add one with the + button</div>`;
   }
   html += `<div class="mtotal">
     <span class="mtotal-lbl">Section total</span>
@@ -404,26 +400,12 @@ function render() {
   fixedBody += customItemsSectionHtml(currentMonth, 'fixed', md, dim);
 
   // Household
-  const gDraftV = gDraft.vendor; const gDraftC = gDraft.category;
   let hhBody = `<div class="sublbl">Veges / Fruits — Sagar &amp; Ajit</div>
     <div class="vendor-row">
       <div class="vendor-item"><div class="v-lbl">Sagar</div><div class="v-val">₹${inr(bySagar)}</div></div>
       <div class="vendor-item"><div class="v-lbl">Ajit</div><div class="v-val">₹${inr(byAjit)}</div></div>
-    </div>
-    <div class="g-add">
-      <select id="g-vendor" class="sel" onchange="gDraft.vendor=this.value">
-        <option${gDraftV==='Sagar'?' selected':''}>Sagar</option>
-        <option${gDraftV==='Ajit'?' selected':''}>Ajit</option>
-      </select>
-      <select id="g-cat" class="sel" onchange="gDraft.category=this.value">
-        <option value="veges"${gDraftC==='veges'?' selected':''}>veges</option>
-        <option value="fruits"${gDraftC==='fruits'?' selected':''}>fruits</option>
-        <option value="other"${gDraftC==='other'?' selected':''}>other</option>
-      </select>
-      <input id="g-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount" value="${esc(gDraft.amount)}" oninput="gDraft.amount=this.value">
-      <input id="g-date" class="misc-date" type="date" value="${esc(gDraft.date||today())}" onchange="captureGroceryDraft()" title="Spend date">
-      <button class="add-btn" onclick="addGrocery()">Add</button>
     </div>`;
+  if (!groceries.length) hhBody += `<div class="cc-empty">Nothing yet — add one with the + button</div>`;
   byDateDesc(groceries).forEach(({it:g,i})=>{
     hhBody += `<div class="g-item" data-cat="groceries" data-idx="${i}">
       <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div>${dateLabel(g.date)}</div>

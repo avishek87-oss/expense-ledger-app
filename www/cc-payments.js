@@ -196,14 +196,12 @@ function confirmPay(method) {
       `paid ₹${amt} ${fixedLabel(key)} via ${methodLabel}`);
   } else if (type === 'misc') {
     const [cat, idx] = args;
-    captureMiscDraft(cat);
     const md = getMD();
     const item = (md[cat]||[])[idx];
     updateMonth({ [cat]:(md[cat]||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
       item && `paid ₹${item.amount} ${cat} (${item.text}) via ${methodLabel}`);
   } else if (type === 'grocery') {
     const [idx] = args;
-    captureGroceryDraft();
     const md = getMD();
     const item = (md.groceries||[])[idx];
     updateMonth({ groceries:(md.groceries||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
