@@ -36,16 +36,17 @@ function stepper(onMinus, onPlus, val) {
     <button class="sbtn" onclick="${onPlus}" aria-label="increase">+</button>
   </div>`;
 }
-const DOW_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function dateChips(mk, dim, dates, onclickFor) {
   const [y,m] = mk.split('-').map(Number);
-  return `<div class="chips">${
-    Array.from({length:dim},(_,i)=>i+1).map(day=>{
-      const on = dates.includes(day);
-      const dow = DOW_SHORT[new Date(y, m-1, day).getDay()];
-      return `<button class="chip${on?' on':''}" onclick="${onclickFor(day)}"><span class="chip-dow">${dow}</span><span class="chip-num">${day}</span></button>`;
-    }).join('')
-  }</div>`;
+  const leadBlanks = new Date(y, m-1, 1).getDay(); // 0=Sun..6=Sat — matches header column order
+  const header = DOW_SHORT.map(d => `<div class="chip-hdr">${d}</div>`).join('');
+  const blanks = Array.from({length:leadBlanks}, () => `<div class="chip-blank"></div>`).join('');
+  const days = Array.from({length:dim},(_,i)=>i+1).map(day=>{
+    const on = dates.includes(day);
+    return `<button class="chip${on?' on':''}" onclick="${onclickFor(day)}">${day}</button>`;
+  }).join('');
+  return `<div class="chips">${header}${blanks}${days}</div>`;
 }
 // ── Custom fixed items: delete control + per-type row rendering ────────────
 function fixedDeleteControl(key, label) {
