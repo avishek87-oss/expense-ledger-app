@@ -36,11 +36,14 @@ function stepper(onMinus, onPlus, val) {
     <button class="sbtn" onclick="${onPlus}" aria-label="increase">+</button>
   </div>`;
 }
-function dateChips(dim, dates, toggleFn) {
+const DOW_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+function dateChips(mk, dim, dates, onclickFor) {
+  const [y,m] = mk.split('-').map(Number);
   return `<div class="chips">${
     Array.from({length:dim},(_,i)=>i+1).map(day=>{
       const on = dates.includes(day);
-      return `<button class="chip${on?' on':''}" onclick="${toggleFn}(${day})">${day}</button>`;
+      const dow = DOW_SHORT[new Date(y, m-1, day).getDay()];
+      return `<button class="chip${on?' on':''}" onclick="${onclickFor(day)}"><span class="chip-dow">${dow}</span><span class="chip-num">${day}</span></button>`;
     }).join('')
   }</div>`;
 }
@@ -67,10 +70,7 @@ function customItemsSectionHtml(mk, section, md, dim) {
     if (it.type === 'perClassDate') {
       const rate = effectiveBase(mk, it.key+'Rate', it.rate);
       const dates = (md.customClassDates||{})[it.key] || [];
-      const chips = `<div class="chips">${Array.from({length:dim},(_,i)=>i+1).map(day=>{
-        const on = dates.includes(day);
-        return `<button class="chip${on?' on':''}" onclick="toggleCustomClassDate('${it.key}',${day})">${day}</button>`;
-      }).join('')}</div>`;
+      const chips = dateChips(mk, dim, dates, day => `toggleCustomClassDate('${it.key}',${day})`);
       return ledgerRow(it.key, it.label, `₹${inr(rate)} × ${dates.length} class${dates.length===1?'':'es'}`, amount, !!md.paid[it.key],
         chips + baseEditControl(it.key+'Rate', rate, 'Per class') + del);
     }
@@ -361,13 +361,13 @@ function render() {
     aaviaBody += ledgerRow('chess','Chess',
       `₹${inr(chessRate)} × ${(md.chessDates||[]).length} class${(md.chessDates||[]).length===1?'':'es'}`,
       chessAmt, !!md.paid.chess,
-      dateChips(dim, md.chessDates||[], 'toggleChessDate') + baseEditControl('chessRate', chessRate, 'Per class') + fixedDeleteControl('chess','Chess'));
+      dateChips(currentMonth, dim, md.chessDates||[], day => `toggleChessDate(${day})`) + baseEditControl('chessRate', chessRate, 'Per class') + fixedDeleteControl('chess','Chess'));
   }
   if (!skateDiscontinued) {
     aaviaBody += ledgerRow('skating','Skating',
       `₹${inr(skateRate)} × ${(md.skatingDates||[]).length} class${(md.skatingDates||[]).length===1?'':'es'}`,
       skateAmt, !!md.paid.skating,
-      dateChips(dim, md.skatingDates||[], 'toggleSkatingDate') + baseEditControl('skatingRate', skateRate, 'Per class') + fixedDeleteControl('skating','Skating'));
+      dateChips(currentMonth, dim, md.skatingDates||[], day => `toggleSkatingDate(${day})`) + baseEditControl('skatingRate', skateRate, 'Per class') + fixedDeleteControl('skating','Skating'));
   }
   aaviaBody += `<div class="sublbl">Miscellaneous</div>${miscItemList('aaviaMisc', md.aaviaMisc)}`;
   aaviaBody += customItemsSectionHtml(currentMonth, 'aavia', md, dim);
@@ -696,4 +696,4 @@ function renderOutstanding() {
 
   document.getElementById('app-body').innerHTML = html;
 }
-
+
