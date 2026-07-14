@@ -33,7 +33,7 @@
   --radius:3px;
   /* layout heights for sticky toolbar positioning (tab bar moved to a fixed
      bottom nav, so it no longer contributes to the sticky header's height) */
-  --header-sticky-height:70px;--month-nav-height:68px;--bottom-nav-height:64px;
+  --header-sticky-height:70px;--month-nav-height:68px;--bottom-nav-height:64px;--section-toolbar-height:44px;
   --toolbar-top:calc(var(--header-sticky-height) + var(--month-nav-height));
 }
 body.no-month-nav{--toolbar-top:var(--header-sticky-height);}
@@ -190,6 +190,15 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
   box-shadow:0 3px 4px rgba(0,0,0,.35); z-index:3;
 }
 .card-hd{width:100%;display:flex;align-items:center;gap:12px;padding:24px 18px 18px;background:none;border:none;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent;overflow:hidden;border-radius:var(--radius)}
+/* Keep the open section's name + remaining amount in view while scrolling
+   through its rows. The card itself is tilted for the scrapbook look, so the
+   header gets its own counter-rotation to land flat once it's pinned. */
+.card.open .card-hd{
+  position:sticky; top:calc(var(--toolbar-top) + var(--section-toolbar-height));
+  z-index:10; background:var(--card); box-shadow:0 3px 8px rgba(0,0,0,.08);
+  transform:rotate(.6deg);
+}
+#sections .card.open:nth-of-type(even) .card-hd{transform:rotate(-.5deg)}
 .card-hd.static{cursor:default}
 .chev{font-size:22px;color:var(--faint);line-height:1;flex-shrink:0;transition:transform .25s ease;width:14px;text-align:center}
 .card.open .chev{transform:rotate(90deg);color:var(--muted)}
