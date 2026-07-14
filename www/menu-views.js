@@ -83,6 +83,7 @@ function openQuickAdd() {
   document.getElementById('qa-text').value = '';
   document.getElementById('qa-amt').value = '';
   document.getElementById('qa-date').value = today();
+  document.getElementById('qa-paid').checked = false;
   qaBucketChanged();
   const overlay = document.getElementById('qa-overlay');
   overlay.classList.remove('hidden');
@@ -108,6 +109,10 @@ function submitQuickAdd() {
     const text = (document.getElementById('qa-text').value || '').trim();
     if (!text) return;
     entry = { text, amount: Math.round(amt), date, paid:false };
+  }
+  if (document.getElementById('qa-paid').checked) {
+    startPayment('quickAdd', mk, bucket, entry);
+    return;
   }
   updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), entry] },
     `added ₹${entry.amount} ${bucket} (${entry.vendor||entry.text})`);
@@ -581,4 +586,4 @@ function setAllCollapsed(v) {
   saveUI();
   render();
 }
-
+

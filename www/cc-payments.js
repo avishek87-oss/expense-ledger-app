@@ -219,6 +219,13 @@ function confirmPay(method) {
     const item = (md[cat]||[])[idx];
     updateMonthFor(mk, { [cat]:(md[cat]||[]).map((it,i)=>i===idx?{...it,paid:true,payMethod:method}:it) },
       item && `paid ₹${item.amount} ${cat} (${item.text||item.vendor}) via ${methodLabel} (${monthLabel(mk)})`);
+  } else if (type === 'quickAdd') {
+    const [mk, bucket, entry] = args;
+    const tmd = getMDFor(mk);
+    const paidEntry = { ...entry, paid:true, payMethod:method };
+    updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), paidEntry] },
+      `added ₹${entry.amount} ${bucket} (${entry.vendor||entry.text}) via ${methodLabel}`);
+    closeQuickAdd();
   } else if (type === 'batch') {
     const [keys] = args;
     const byMonth = {};
@@ -619,4 +626,4 @@ function deleteCcPayment(cardKey, idx) {
   if (item) moveToTrash({ kind:'ccPayment', cardKey, item });
   saveCcPayments({ ...cur, [cardKey]: cur[cardKey].filter((_,i) => i!==idx) }, 'deleted a CC payment');
 }
-
+
