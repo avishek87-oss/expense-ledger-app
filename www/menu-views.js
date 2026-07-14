@@ -426,6 +426,20 @@ function cycleLockEnabled() {
   saveUI();
   renderMenu();
 }
+// Due-soon/overdue chip + a thin close-date→due-date progress bar. Only shown
+// once a statement has actually closed (statusClass 'due'/'over') — a 'cur'
+// cycle is still accruing charges, so a countdown to its future due date isn't
+// meaningful yet.
+function dueCountdownHtml(c) {
+  if (c.statusClass !== 'due' && c.statusClass !== 'over') return '';
+  const over = c.statusClass === 'over';
+  const cls = over ? 'over' : 'soon';
+  const label = over ? `Overdue ${Math.abs(c.daysUntilDue)}d` : (c.daysUntilDue <= 0 ? 'Due today' : `Due in ${c.daysUntilDue}d`);
+  return `<div class="cc-countdown">
+    <span class="cc-countdown-chip ${cls}">${label}</span>
+    <div class="cc-countdown-bar"><i class="${cls}" style="width:${c.cyclePct}%"></i></div>
+  </div>`;
+}
 function ccSectionHtml() {
   let html = '';
   Object.keys(CC_CYCLES).forEach(cardKey => {
@@ -440,8 +454,11 @@ function ccSectionHtml() {
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');
     html += visible.length
       ? visible.map(c => `<div class="cc-cyc" onclick="openCcCycleReview('${cardKey}','${c.key}','${esc(c.label)}',${c.total})">
-          <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
-          <div class="cc-cyc-amt">₹${inr(c.total)}</div>
+          <div class="cc-cyc-top">
+            <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
+            <div class="cc-cyc-amt">₹${inr(c.total)}</div>
+          </div>
+          ${dueCountdownHtml(c)}
         </div>`).join('')
       : (b.cycles.length ? `<div class="cc-empty">All cycles paid up ✓</div>`
                          : `<div class="cc-empty">No spends on this card yet</div>`);

@@ -794,7 +794,11 @@ function ccBuildCycles(cardKey) {
     else if (remaining <= 0)   { statusClass='ok';   statusLabel='Paid'; }
     else if (now > cyc.due)    { statusClass='over'; statusLabel='Overdue · was due ' + fmtDate(isoOf(cyc.due)) + left; }
     else                       { statusClass='due';  statusLabel='Due ' + fmtDate(isoOf(cyc.due)) + left; }
-    return { key: cyc.key, label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, remaining, statusClass, statusLabel };
+    // Countdown + progress bar (close date -> due date), only meaningful once the
+    // statement has actually closed (i.e. not for 'cur', which is still accruing).
+    const daysUntilDue = Math.round((cyc.due - now) / 86400000);
+    const cyclePct = Math.max(0, Math.min(100, Math.round((now - cyc.end) / (cyc.due - cyc.end) * 100)));
+    return { key: cyc.key, label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, remaining, statusClass, statusLabel, daysUntilDue, cyclePct };
   });
   out.reverse(); // most recent first
   return { cycles: out, outstanding: totalCharged - totalPaid };
