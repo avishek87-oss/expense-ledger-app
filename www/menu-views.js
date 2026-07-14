@@ -175,7 +175,10 @@ function renderSearch() {
   const hits = searchIndex().filter(it => {
     const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + (it.cat==='fixed' ? '' : ' ' + (it.amount||''))).toLowerCase();
     return hay.includes(q);
-  }).sort((a,b) => (a.mk < b.mk ? 1 : -1)); // newest month first
+  }).sort((a,b) => { // newest date first (fixed entries have no exact date — treat as start-of-month)
+    const ka = a.date || (a.mk + '-01'), kb = b.date || (b.mk + '-01');
+    return kb.localeCompare(ka);
+  });
   if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches for “${esc(q)}”.</div>`; return; }
   box.innerHTML = hits.slice(0, 100).map(it => {
     const name = it.cat === 'groceries' ? `${esc(it.vendor)} · ${esc(it.category)}` : esc(it.text||'');

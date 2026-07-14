@@ -547,7 +547,7 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
       }
     });
   });
-  txns.sort((a, b) => new Date(a.date) - new Date(b.date));
+  txns.sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first
   const cycleTotal = txns.reduce((s, t) => s + t.amount, 0);
   let html = `<div class="cc-cyc-review-header" style="display:flex;justify-content:space-between;align-items:center"><div><span class="cc-cyc-review-title">${esc(label)}</span><span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span></div><button onclick="openCycleAddForm('${cardKey}')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:500">+ Add</button></div>`;
   if (txns.length) {
