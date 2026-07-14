@@ -501,8 +501,8 @@ function renderHome() {
       <div class="hero-num">₹${inr(t.total)}</div>
     </div>
     <div class="hero-stats">
-      <div class="hstat"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
-      <div class="hstat"><div class="k">Pending</div><div class="v">₹${inr(pendingTot)}</div></div>
+      <div class="hstat tap" onclick="event.stopPropagation(); switchTab('ledger')"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
+      <div class="hstat tap" onclick="event.stopPropagation(); switchTab('outstanding')"><div class="k">Pending</div><div class="v">₹${inr(pendingTot)}</div></div>
     </div>
   </div>
   <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>

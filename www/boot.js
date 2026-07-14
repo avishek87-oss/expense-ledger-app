@@ -252,6 +252,7 @@ async function boot() {
   pruneTrash();
   render();
   bindSwipe();
+  bindFabLongPress();
   scheduleNotifications();
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
   launchStatus('Loading…', 20);

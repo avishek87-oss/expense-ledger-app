@@ -560,7 +560,7 @@ function applyTabChrome() {
   document.getElementById('month-nav').classList.toggle('hidden', currentTab==='outstanding');
   document.body.classList.toggle('no-month-nav', currentTab==='outstanding');
   const fab = document.getElementById('fab');
-  if (fab) fab.classList.toggle('hidden', currentTab!=='ledger'); // quick-add only on the Ledger tab
+  if (fab) fab.classList.remove('hidden'); // quick-add available from every tab
 }
 // Month-nav browsing window: never show months beyond the current one, and only
 // go back 3 months from today (independent of MIN_MONTH, which is the app's fixed
@@ -577,6 +577,25 @@ function shiftMonth(d) {
 }
 function jumpToday() {
   currentMonth = todayMonthKey();
+  render();
+}
+// Popover to jump several months at once instead of repeated ‹/› taps — same
+// browsing window as the arrows (navMinMonth()..todayMonthKey()).
+function openMonthPicker() {
+  const grid = document.getElementById('month-picker-grid');
+  const months = [];
+  for (let mk = navMinMonth(); mk <= todayMonthKey(); mk = addMonths(mk, 1)) months.push(mk);
+  grid.innerHTML = months.map(mk => {
+    const short = monthLabel(mk).split(' ')[0];
+    return `<button class="month-pick-btn${mk===currentMonth?' active':''}" onclick="jumpToMonth('${mk}')">${short}</button>`;
+  }).join('');
+  document.getElementById('month-picker-overlay').classList.remove('hidden');
+  attachOverlayBackHandler('month-picker-overlay', closeMonthPicker);
+}
+function closeMonthPicker() { document.getElementById('month-picker-overlay').classList.add('hidden'); }
+function jumpToMonth(mk) {
+  currentMonth = mk;
+  closeMonthPicker();
   render();
 }
 

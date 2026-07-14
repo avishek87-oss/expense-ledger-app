@@ -77,6 +77,83 @@ function closeMenu() {
 }
 function setMenuView(v) { menuView = v; renderMenu(); }
 
+// ── FAB: tap for Quick Add, hold for shortcuts to your most-repeated entries ──
+let fabPressTimer = null;
+let fabLongPressed = false;
+function fabPointerDown() {
+  fabLongPressed = false;
+  fabPressTimer = setTimeout(() => { fabLongPressed = true; doHaptic(); openFabShortcuts(); }, 550);
+}
+function fabPointerUp() { clearTimeout(fabPressTimer); }
+function fabClick() {
+  if (fabLongPressed) { fabLongPressed = false; return; } // already handled by the long-press
+  openQuickAdd();
+}
+function bindFabLongPress() {
+  const fab = document.getElementById('fab');
+  if (!fab || fab.dataset.lpBound) return;
+  fab.dataset.lpBound = '1';
+  fab.addEventListener('pointerdown', fabPointerDown);
+  fab.addEventListener('pointerup', fabPointerUp);
+  fab.addEventListener('pointerleave', fabPointerUp);
+  fab.addEventListener('pointercancel', fabPointerUp);
+}
+// Ranks past grocery/misc entries by how often the same vendor+category (or misc
+// text) was logged before, so the 3 most-repeated ones can be one-tap shortcuts.
+let fabShortcuts = [];
+function topQuickAddShortcuts() {
+  const counts = {};
+  Object.values(appState.months||{}).forEach(md => {
+    (md.groceries||[]).forEach(it => {
+      if (!it.vendor) return;
+      const key = 'groceries|' + it.vendor + '|' + it.category;
+      counts[key] = (counts[key]||0) + 1;
+    });
+    ['householdGroceries','householdMisc','nehaMisc','avishekMisc','aaviaMisc'].forEach(cat => {
+      (md[cat]||[]).forEach(it => {
+        const text = (it.text||'').trim();
+        if (!text) return;
+        const key = cat + '|' + text.toLowerCase() + '|' + text; // last segment preserves original casing
+        counts[key] = (counts[key]||0) + 1;
+      });
+    });
+  });
+  return Object.entries(counts)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0,3)
+    .map(([key,count]) => {
+      const [bucket, a, b] = key.split('|');
+      return bucket === 'groceries'
+        ? { bucket, vendor:a, category:b, label:`${a} · ${b}`, count }
+        : { bucket, text:b, label:b, count };
+    });
+}
+function openFabShortcuts() {
+  fabShortcuts = topQuickAddShortcuts();
+  const list = document.getElementById('qa-shortcuts-list');
+  list.innerHTML = fabShortcuts.length
+    ? fabShortcuts.map((s,i) => `<button class="add-btn" style="width:100%;margin-bottom:8px;text-align:left" onclick="applyFabShortcut(${i})">${esc(s.label)}</button>`).join('')
+    : `<div class="cc-empty">No repeated items yet — add a few with + and shortcuts will show up here.</div>`;
+  document.getElementById('qa-shortcuts-overlay').classList.remove('hidden');
+  attachOverlayBackHandler('qa-shortcuts-overlay', closeFabShortcuts);
+}
+function closeFabShortcuts() { document.getElementById('qa-shortcuts-overlay').classList.add('hidden'); }
+function applyFabShortcut(i) {
+  const s = fabShortcuts[i];
+  closeFabShortcuts();
+  if (!s) return;
+  openQuickAdd();
+  const bucketSel = document.getElementById('qa-bucket');
+  bucketSel.value = s.bucket;
+  qaBucketChanged();
+  if (s.bucket === 'groceries') {
+    document.getElementById('qa-vendor').value = s.vendor;
+    document.getElementById('qa-cat').value = s.category;
+  } else {
+    document.getElementById('qa-text').value = s.text;
+  }
+}
+
 // ── Quick-add (floating +) ─────────────────────────────────────────────────
 const QA_GROCERY = 'groceries';
 function openQuickAdd() {
