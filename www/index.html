@@ -200,6 +200,24 @@
   </div>
 </div>
 
+<div id="item-edit-overlay" class="pay-overlay hidden" onclick="cancelItemEdit()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title" id="ie-title">Edit item</div>
+    <input id="ie-name" class="misc-txt" style="width:100%;margin-bottom:10px" type="text" placeholder="item name">
+    <div id="ie-grocery-row" style="display:none;gap:8px;margin-bottom:10px">
+      <select id="ie-vendor" class="sel" style="flex:1"><option>Sagar</option><option>Ajit</option></select>
+      <select id="ie-cat" class="sel" style="flex:1"><option value="veges">veges</option><option value="fruits">fruits</option><option value="other">other</option></select>
+    </div>
+    <div class="cc-pay-fields">
+      <input id="ie-amount" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
+      <input id="ie-date" class="cc-date" type="date">
+    </div>
+    <label class="chk-row"><input type="checkbox" id="ie-paid" onchange="iePaidChanged()"> Paid <span id="ie-paid-method" class="lrow-sub"></span></label>
+    <button class="add-btn cc-pay-confirm" onclick="saveItemEdit()">Save</button>
+    <button class="pay-cancel" onclick="cancelItemEdit()">Cancel</button>
+  </div>
+</div>
+
 <div id="pay-overlay" class="pay-overlay hidden" onclick="cancelPay()">
   <div class="pay-sheet" onclick="event.stopPropagation()">
     <div class="pay-sheet-title">Pay via</div>

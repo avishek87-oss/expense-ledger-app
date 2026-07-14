@@ -14,7 +14,7 @@ function monthCategoryTotals(mk) {
     + (isDiscontinued('english',mk) ? 0 : englishFee(mk))
     + (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0)
     + customSectionTotal(mk, 'aavia');
-  const fixed = (isDiscontinued('sukanya',mk) ? 0 : SUKANYA)
+  const fixed = (isDiscontinued('sukanya',mk) ? 0 : sukanyaFee(mk))
     + (isDiscontinued('carEmi',mk) ? 0 : carEmiFee(mk))
     + (isDiscontinued('rent',mk) ? 0 : effectiveBase(mk,'rent',rentFee(mk)))
     + customSectionTotal(mk, 'fixed');
@@ -143,7 +143,7 @@ function fixedSearchEntries(mk) {
   if (md.bharatnatyamAttended) chk('bharatnatyam', effectiveBase(mk,'bharatnatyam',1500));
   chk('chess',   (md.chessDates||[]).length   * effectiveBase(mk,'chessRate',500));
   chk('skating', (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375));
-  chk('sukanya', SUKANYA);
+  chk('sukanya', sukanyaFee(mk));
   chk('carEmi',  carEmiFee(mk));
   chk('rent',    effectiveBase(mk,'rent', rentFee(mk)));
   ['maids','aavia','fixed','household','neha','avishek'].forEach(section => {

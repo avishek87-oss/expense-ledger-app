@@ -27,6 +27,7 @@ const MAIDS = [
   { key:'sujata',  label:'Sujata',  base:2800  },
 ];
 const SUKANYA = 12500;
+function sukanyaFee(mk) { return effectiveBase(mk, 'sukanya', SUKANYA); }
 const STORAGE_KEY = 'household-ledger-v1';
 const UI_KEY = 'household-ledger-ui-v1';
 const PENDING_SYNC_KEY = 'household-ledger-pending-sync-v1';
@@ -531,8 +532,8 @@ function bizoneFee(mk) {
   const mo = parseInt(mk.split('-')[1]);
   return (mo===4||mo===10) ? effectiveBase(mk, 'bizone', 12285) : 0;
 }
-function englishFee(mk)  { return (mk==='2026-07'||mk==='2026-11') ? 10000 : 0; }
-function carEmiFee(mk)   { return (mk>='2022-08'&&mk<='2027-07') ? 37500 : 0; }
+function englishFee(mk)  { return (mk==='2026-07'||mk==='2026-11') ? effectiveBase(mk,'english',10000) : 0; }
+function carEmiFee(mk)   { return (mk>='2022-08'&&mk<='2027-07') ? effectiveBase(mk,'carEmi',37500) : 0; }
 function rentFee(mk) {
   if (mk<'2026-08') return 80000;
   if (mk==='2026-08') return 81548;
@@ -664,10 +665,6 @@ function addGrocery() {
   gDraft.amount=''; gDraft.date='';
   updateMonthFor(mk, { groceries:[...(tmd.groceries||[]),entry] }, `added ₹${amt} groceries (${entry.vendor})`);
 }
-function editGroceryDate(i, val) {
-  if (!val) return;
-  moveDatedItem('groceries', i, val);
-}
 function toggleGroceryPaid(i) {
   // Only called to UNMARK; marking goes through startPayment
   captureGroceryDraft();
@@ -703,28 +700,6 @@ function addMiscItem(cat) {
   miscDrafts[cat] = { text:'', amount:'', date:'' };
   updateMonthFor(mk, { [cat]:[...(tmd[cat]||[]),{ text, amount:amt, paid:false, date }] }, `added ₹${amt} ${cat} (${text})`);
 }
-function editMiscDate(cat, i, val) {
-  if (!val) return;
-  moveDatedItem(cat, i, val);
-}
-// Change an array item's date; if the new date is in another month, move the item there.
-function moveDatedItem(cat, i, val) {
-  const fromMk = currentMonth;
-  const toMk   = clampMonth(monthKeyOf(val));
-  const fmd    = getMD();
-  const item   = (fmd[cat]||[])[i];
-  if (!item) return;
-  if (toMk === fromMk) {
-    updateMonth({ [cat]:(fmd[cat]||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
-    return;
-  }
-  const tmd = getMDFor(toMk);
-  pushUndo('Move item to ' + monthLabel(toMk));
-  appState = { ...appState, months: { ...appState.months,
-    [fromMk]: { ...fmd, [cat]: (fmd[cat]||[]).filter((_,idx)=>idx!==i) },
-    [toMk]:   { ...tmd, [cat]: [...(tmd[cat]||[]), { ...item, date: val }] } } };
-  saveLocal(); render(); if (IN_GAS) scheduleSync();
-}
 function toggleMiscPaid(cat,i) {
   // Only called to UNMARK; marking goes through startPayment
   captureMiscDraft(cat);
@@ -742,4 +717,4 @@ function deleteMiscItem(cat,i) {
 }
 
 function today() { return new Date().toISOString().slice(0,10); }
-
+
