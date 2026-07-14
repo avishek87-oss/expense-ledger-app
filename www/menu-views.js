@@ -285,6 +285,7 @@ function renderMenu() {
     <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
     <a class="menu-link" onclick="cycleLockEnabled()">Screen Lock <span>${lockLabel()}</span></a>
     <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
+    <a class="menu-link" onclick="cycleStyle()">Theme <span>${styleLabel()}</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
 }
@@ -581,4 +582,4 @@ function setAllCollapsed(v) {
   saveUI();
   render();
 }
-
+

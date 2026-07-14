@@ -248,6 +248,7 @@ async function boot() {
   loadLocal();
   loadUI();
   applyTheme();
+  applyStyle();
   loadAuth();
   pruneTrash();
   render();

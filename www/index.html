@@ -19,6 +19,7 @@
     var pref = ui.theme || 'auto';
     var dark = pref === 'dark' || (pref === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches);
     if (dark) document.documentElement.setAttribute('data-theme','dark');
+    if (ui.style && ui.style !== 'classic') document.documentElement.setAttribute('data-style', ui.style);
   } catch(e){}
 })();
 </script>
@@ -80,9 +81,9 @@
 <div id="hdr">
   <div id="hdr-inner">
     <div id="hdr-top">
-      <button id="hmb" onclick="openMenu()" aria-label="Menu">☰</button>
+      <button id="hmb" onclick="openMenu()" aria-label="Menu"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <h1>Household Ledger<span class="sub">Avishek Family</span></h1>
-      <button id="search-btn" onclick="openSearch()" aria-label="Search" title="Search transactions">🔍</button>
+      <button id="search-btn" onclick="openSearch()" aria-label="Search" title="Search transactions"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
       <button id="undo-btn" class="hidden" onclick="undoLastAction()" aria-label="Undo last action" title="Undo last action">↩<span id="undo-count"></span></button>
       <div id="sync-chip" title="Your data is saved on this device">
         <span id="sync-dot"></span>

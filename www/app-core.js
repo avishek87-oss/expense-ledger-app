@@ -332,8 +332,7 @@ function resolveDark(pref) {
 function applyTheme() {
   const dark = resolveDark(themePref());
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', dark ? '#0f1216' : '#eef1f4');
+  syncThemeColorMeta();
 }
 function cycleTheme() {
   const order = ['auto','light','dark'];
@@ -347,6 +346,34 @@ function themeLabel() {
 // Keep 'auto' in step with the OS if the system theme flips while the app is open.
 if (window.matchMedia) {
   try { matchMedia('(prefers-color-scheme:dark)').addEventListener('change', () => { if (themePref()==='auto') applyTheme(); }); } catch(e){}
+}
+
+// ── Style (visual theme, independent of light/dark) ───────────────────────
+// 'classic' is the app's original look; other values pick an alternate
+// design (e.g. 'splitwise') via the [data-style] attribute in style.css.
+function stylePref() { return uiPrefs.style || 'classic'; }
+function applyStyle() {
+  const s = stylePref();
+  if (s === 'classic') document.documentElement.removeAttribute('data-style');
+  else document.documentElement.setAttribute('data-style', s);
+  syncThemeColorMeta();
+}
+const STYLE_ORDER = ['classic','cloud-dancer','splitwise'];
+const STYLE_NAMES = { classic:'Classic', 'cloud-dancer':'Cloud Dancer', splitwise:'Splitwise' };
+function cycleStyle() {
+  uiPrefs.style = STYLE_ORDER[(STYLE_ORDER.indexOf(stylePref()) + 1) % STYLE_ORDER.length];
+  saveUI(); applyStyle(); renderMenu();
+}
+function styleLabel() {
+  return STYLE_NAMES[stylePref()] || 'Classic';
+}
+// Reads the theme's actual --bg (works for any style, not just classic) so the
+// Android status bar / task-switcher color always matches what's on screen.
+function syncThemeColorMeta() {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  if (bg) meta.setAttribute('content', bg);
 }
 
 // ── Pure calc helpers ──────────────────────────────────────────────────────
@@ -742,4 +769,4 @@ function deleteMiscItem(cat,i) {
 }
 
 function today() { return new Date().toISOString().slice(0,10); }
-
+
