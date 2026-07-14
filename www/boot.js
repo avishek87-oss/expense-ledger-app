@@ -252,6 +252,7 @@ async function boot() {
   pruneTrash();
   render();
   bindSwipe();
+  bindMonthSwipe();
   bindFabLongPress();
   scheduleNotifications();
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;

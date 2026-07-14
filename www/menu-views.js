@@ -346,6 +346,50 @@ function bindSwipe() {
   body.addEventListener('touchend',   swipeEnd,   { passive:true });
   body.addEventListener('touchcancel', swipeEnd,  { passive:true });
 }
+
+// ── Swipe to change month (delegated on #app-body, Ledger tab only) ────────
+// Only activates when the touch doesn't start on a row/control — those already
+// own horizontal swipes (delete/mark-paid above) or their own taps.
+let monthSwipe = null;
+function monthSwipeStart(e) {
+  if (currentTab !== 'ledger') { monthSwipe = null; return; }
+  // Exclude rows (their own swipe above) and specific action controls, but NOT
+  // .card-hd — it's a <button> too, yet is most of the screen's open surface,
+  // and a tap (near-zero movement) still reaches its onclick normally either way.
+  if (e.target.closest('.mitem, .g-item, .pbtn, .base-edit-btn, .del-btn, .sbtn, .chip, input, select, .date-chip')) { monthSwipe = null; return; }
+  const t = e.touches[0];
+  monthSwipe = { x0:t.clientX, y0:t.clientY, dx:0, lock:null };
+}
+function monthSwipeMove(e) {
+  if (!monthSwipe) return;
+  const t = e.touches[0];
+  const dx = t.clientX - monthSwipe.x0, dy = t.clientY - monthSwipe.y0;
+  if (monthSwipe.lock === null) {
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    monthSwipe.lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+  }
+  if (monthSwipe.lock !== 'h') { monthSwipe = null; return; } // vertical → let the page scroll
+  e.preventDefault();
+  monthSwipe.dx = dx;
+}
+function monthSwipeEnd() {
+  if (!monthSwipe) return;
+  const { dx, lock } = monthSwipe;
+  monthSwipe = null;
+  if (lock !== 'h') return;
+  const TH = 90;
+  if (dx < -TH)      { doHaptic(); shiftMonth(1); }
+  else if (dx > TH)  { doHaptic(); shiftMonth(-1); }
+}
+function bindMonthSwipe() {
+  const body = document.getElementById('app-body');
+  if (!body || body.dataset.monthSwipeBound) return;
+  body.dataset.monthSwipeBound = '1';
+  body.addEventListener('touchstart', monthSwipeStart, { passive:true });
+  body.addEventListener('touchmove',  monthSwipeMove,  { passive:false });
+  body.addEventListener('touchend',   monthSwipeEnd,   { passive:true });
+  body.addEventListener('touchcancel', () => { monthSwipe = null; }, { passive:true });
+}
 function signOut() { try { localStorage.removeItem(AUTH_KEY); } catch(e){} auth = null; closeMenu(); location.reload(); }
 function renderMenu() {
   const el = document.getElementById('menu-content');
