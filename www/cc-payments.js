@@ -93,8 +93,7 @@ function startBatchPay() {
   const anyNoCC = keys.some(k => { const [,itype,ikey] = k.split('|'); return itype==='fixed' && NO_CC_KEYS.has(ikey); });
   const methods = anyNoCC ? PAY_METHODS.filter(m => m.key !== 'axisCC' && m.key !== 'scapiaCC') : PAY_METHODS;
   pendingPay = { type:'batch', args:[keys] };
-  document.getElementById('pay-methods').innerHTML =
-    methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
+  document.getElementById('pay-methods').innerHTML = payMethodButtonsHtml(methods);
   document.getElementById('pay-overlay').classList.remove('hidden');
 }
 
@@ -153,9 +152,16 @@ function nehaBalanceEditControl(currentBalance) {
 }
 
 // ── Payment picker ─────────────────────────────────────────────────────────
+// Stable per-method identity dot (see --pm-* tokens in style.css) — used on
+// "via" chips and on the picker buttons themselves so the same color always
+// means the same payment source everywhere in the app.
+function pmDot(key) { return `<span class="pm-dot" style="background:var(--pm-${key})"></span>`; }
 function pmChip(method) {
   const pm = PAY_METHODS.find(m => m.key === method);
-  return pm ? `<span class="pay-chip">via ${pm.short}</span>` : '';
+  return pm ? `<span class="pay-chip">${pmDot(pm.key)}via ${pm.short}</span>` : '';
+}
+function payMethodButtonsHtml(methods) {
+  return methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${pmDot(m.key)}${m.label}</button>`).join('');
 }
 function startPayment(type, ...args) {
   // Determine the item key for restriction lookups (fixed items only)
@@ -174,8 +180,7 @@ function startPayment(type, ...args) {
     : PAY_METHODS;
 
   pendingPay = { type, args };
-  document.getElementById('pay-methods').innerHTML =
-    methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
+  document.getElementById('pay-methods').innerHTML = payMethodButtonsHtml(methods);
   const overlay = document.getElementById('pay-overlay');
   overlay.classList.remove('hidden');
   attachOverlayBackHandler('pay-overlay', cancelPay);

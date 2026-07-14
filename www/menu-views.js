@@ -40,7 +40,7 @@ function heroSpendsHtml(mk) {
   const paidSum = paid.reduce((s,it) => s+it.amount, 0);
   const unpaid  = Math.max(0, t.total - paidSum);
   const srcRows = PAY_METHODS.filter(m => byM[m.key]).map(m =>
-    `<div class="hspend-row"><span>${m.label}</span><span class="mono">₹${inr(byM[m.key])}</span></div>`).join('');
+    `<div class="hspend-row"><span>${pmDot(m.key)}${m.label}</span><span class="mono">₹${inr(byM[m.key])}</span></div>`).join('');
   const unpaidRow = unpaid > 0.5
     ? `<div class="hspend-row due"><span>Unpaid</span><span class="mono">₹${inr(unpaid)}</span></div>` : '';
 
@@ -637,7 +637,7 @@ function sourceSpendsHtml() {
     const paidSum = paid.reduce((s,it) => s+it.amount, 0);
     const unpaid  = Math.max(0, monthCategoryTotals(mk).total - paidSum);
     const rows = PAY_METHODS.filter(m => byM[m.key]).map(m =>
-      `<div class="ms-row"><span>${m.label}</span><span>₹${inr(byM[m.key])}</span></div>`).join('');
+      `<div class="ms-row"><span>${pmDot(m.key)}${m.label}</span><span>₹${inr(byM[m.key])}</span></div>`).join('');
     const unpaidRow = unpaid > 0.5
       ? `<div class="ms-row"><span style="color:var(--maroon)">Unpaid</span><span style="color:var(--maroon)">₹${inr(unpaid)}</span></div>` : '';
     return `<section class="ms-month">
