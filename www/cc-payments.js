@@ -292,6 +292,17 @@ function cancelItemEdit() {
   pendingItemEdit = null;
   document.getElementById('item-edit-overlay').classList.add('hidden');
 }
+// Delete/discontinue lives in the edit sheet instead of a permanent 🗑/× on every
+// row. Grocery/misc deletion stays undo-able with no extra confirm (same as the
+// existing swipe-to-delete gesture); discontinuing a fixed item already confirms.
+function deleteItemFromEdit() {
+  const pe = pendingItemEdit;
+  if (!pe) return;
+  if (pe.kind === 'grocery') deleteGrocery(pe.idx);
+  else if (pe.kind === 'misc') deleteMiscItem(pe.cat, pe.idx);
+  else if (pe.kind === 'fixed') discontinueFixedItem(pe.key, pe.label);
+  cancelItemEdit();
+}
 function ieShowGroceryFields(isGrocery) {
   document.getElementById('ie-name').style.display = isGrocery ? 'none' : 'block';
   document.getElementById('ie-grocery-row').style.display = isGrocery ? 'flex' : 'none';
@@ -311,6 +322,7 @@ function openGroceryEdit(i) {
   const chk = document.getElementById('ie-paid');
   chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
   document.getElementById('ie-paid-method').textContent = '';
+  document.getElementById('ie-delete-btn').textContent = 'Delete item';
   openItemEditOverlay();
 }
 function openMiscEdit(cat, i) {
@@ -328,6 +340,7 @@ function openMiscEdit(cat, i) {
   const chk = document.getElementById('ie-paid');
   chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
   document.getElementById('ie-paid-method').textContent = '';
+  document.getElementById('ie-delete-btn').textContent = 'Delete item';
   openItemEditOverlay();
 }
 // amountEditable is false for the handful of fixed items whose "amount" isn't a
@@ -348,6 +361,7 @@ function openFixedItemEdit(key, label, baseKey, baseDefault, nameEditable, amoun
   const chk = document.getElementById('ie-paid');
   chk.checked = paid; chk.dataset.wasPaid = paid ? '1' : '0';
   document.getElementById('ie-paid-method').textContent = '';
+  document.getElementById('ie-delete-btn').textContent = 'Stop tracking ' + label;
   openItemEditOverlay();
 }
 function iePaidChanged() {

@@ -26,8 +26,8 @@ function ledgerRow(key, label, sub, amount, paid, controls='', editSpec=null) {
     </div>
     <div class="lrow-right">
       <span class="lrow-amt">₹${inr(amount)}</span>
-      ${pencil}
       ${paidBtn(key, paid, amount)}
+      ${pencil}
     </div>
   </div>
   ${controls?`<div class="lrow-ctrl">${controls}</div>`:''}
@@ -52,26 +52,24 @@ function dateChips(mk, dim, dates, onclickFor) {
   }).join('');
   return `<div class="chips">${header}${blanks}${days}</div>`;
 }
-// ── Custom fixed items: delete control + per-type row rendering ────────────
-function fixedDeleteControl(key, label) {
-  return `<button class="base-edit-btn" title="Stop tracking" onclick="discontinueFixedItem('${key}','${esc(label)}')">🗑</button>`;
-}
+// ── Custom fixed items: per-type row rendering ──────────────────────────────
+// "Stop tracking" (formerly a 🗑 button on every row) now lives inside the
+// pencil's edit sheet instead — see openFixedItemEdit()/deleteItemFromEdit().
 function customItemsSectionHtml(mk, section, md, dim) {
   return activeCustomItems(mk, section).map(it => {
     const amount = customItemAmount(mk, it.key, it);
-    const del = fixedDeleteControl(it.key, it.label);
     if (it.type === 'leaveProrated') {
       const base = effectiveBase(mk, it.key, it.amount);
       const leaves = md.maidLeaves[it.key] ?? 0;
       return ledgerRow(it.key, it.label, `base ₹${inr(base)} · ${leaves} leave${leaves===1?'':'s'} this month`, amount, !!md.paid[it.key],
-        `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${it.key}',-1)`,`changeLeaves('${it.key}',1)`,leaves)}</div>${del}`,
+        `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${it.key}',-1)`,`changeLeaves('${it.key}',1)`,leaves)}</div>`,
         { baseKey:it.key, baseDefault:base, nameEditable:true });
     }
     if (it.type === 'attendance') {
       const attended = !!(md.customAttended||{})[it.key];
       const base = effectiveBase(mk, it.key, it.amount);
       return ledgerRow(it.key, it.label, `₹${inr(base)} flat if attended this month`, amount, !!md.paid[it.key],
-        `<label class="chk-row"><input type="checkbox" ${attended?'checked':''} onchange="toggleCustomAttended('${it.key}')"> Attended this month</label>${del}`,
+        `<label class="chk-row"><input type="checkbox" ${attended?'checked':''} onchange="toggleCustomAttended('${it.key}')"> Attended this month</label>`,
         { baseKey:it.key, baseDefault:base, nameEditable:true });
     }
     if (it.type === 'perClassDate') {
@@ -79,10 +77,10 @@ function customItemsSectionHtml(mk, section, md, dim) {
       const dates = (md.customClassDates||{})[it.key] || [];
       const chips = dateChips(mk, dim, dates, day => `toggleCustomClassDate('${it.key}',${day})`);
       return ledgerRow(it.key, it.label, `₹${inr(rate)} × ${dates.length} class${dates.length===1?'':'es'}`, amount, !!md.paid[it.key],
-        chips + del,
+        chips,
         { baseKey:it.key+'Rate', baseDefault:rate, nameEditable:true });
     }
-    return ledgerRow(it.key, it.label, 'flat, custom', amount, !!md.paid[it.key], del,
+    return ledgerRow(it.key, it.label, 'flat, custom', amount, !!md.paid[it.key], '',
       { baseKey:it.key, baseDefault:effectiveBase(mk, it.key, it.amount), nameEditable:true });
   }).join('');
 }
@@ -103,11 +101,10 @@ function miscItemList(cat, items) {
       </div>
       <div class="mitem-right">
         <span class="mitem-amt">₹${inr(it.amount)}</span>
-        <button class="base-edit-btn" title="Edit" onclick="openMiscEdit('${cat}',${i})">✎</button>
         ${it.paid
           ? `<div class="paid-grp"><button class="pbtn sm paid" onclick="toggleMiscPaid('${cat}',${i})">Paid</button>${pmChip(it.payMethod)}</div>`
           : `<button class="pbtn sm due" onclick="startPayment('misc','${cat}',${i})">Mark paid</button>`}
-        <button class="del-btn" onclick="deleteMiscItem('${cat}',${i})" aria-label="delete">×</button>
+        <button class="base-edit-btn" title="Edit" onclick="openMiscEdit('${cat}',${i})">✎</button>
       </div>
     </div>`).join('');
   } else {
@@ -329,7 +326,7 @@ function render() {
     maidsBody += ledgerRow(m.key, m.label,
       `base ₹${inr(m.base)} · ${m.leaves} leave${m.leaves===1?'':'s'} this month`,
       m.amount, !!md.paid[m.key],
-      `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${m.key}',${-maidLeafStep(m.key)})`,`changeLeaves('${m.key}',${maidLeafStep(m.key)})`,m.leaves)}</div>${fixedDeleteControl(m.key, m.label)}`,
+      `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${m.key}',${-maidLeafStep(m.key)})`,`changeLeaves('${m.key}',${maidLeafStep(m.key)})`,m.leaves)}</div>`,
       { baseKey:m.key, baseDefault:m.base }
     );
   });
@@ -337,7 +334,7 @@ function render() {
     maidsBody += ledgerRow('japaMaid','Japa Maid',
       japaActive ? `live-in · flat ₹28,000/mo, prorated · ${japaDays} of ${dim} days` : 'not in service this month',
       japaAmt, !!md.paid.japaMaid,
-      (japaActive ? `<div class="field"><span class="field-lbl">Days present</span>${stepper('changeJapaDays(-1)','changeJapaDays(1)',japaDays)}</div>` : '') + fixedDeleteControl('japaMaid','Japa Maid'),
+      (japaActive ? `<div class="field"><span class="field-lbl">Days present</span>${stepper('changeJapaDays(-1)','changeJapaDays(1)',japaDays)}</div>` : ''),
       { amountEditable:false } // day-prorated total, not a single overridable base
     );
   }
@@ -348,45 +345,43 @@ function render() {
   if (!schoolDiscontinued) {
     aaviaBody += ledgerRow('schoolFees','P G Garodia School', schoolSub, schoolTot, !!md.paid.schoolFees,
       baseEditControl('schoolRate', schoolRateBase, 'Tuition Base') +
-      (isTermMo ? baseEditControl('schoolBus', busBase, 'Bus Base') : '') + fixedDeleteControl('schoolFees','P G Garodia School'),
+      (isTermMo ? baseEditControl('schoolBus', busBase, 'Bus Base') : ''),
       { amountEditable:false } // two separate base values (tuition + bus), edited above instead
     );
   }
   if (!bizoneDiscontinued) {
     aaviaBody += ledgerRow('bizone','Bizone (snacks)',
       bizone ? `₹${inr(bizone)} this term` : 'nothing due this month',
-      bizone, !!md.paid.bizone,
-      fixedDeleteControl('bizone','Bizone (snacks)'),
+      bizone, !!md.paid.bizone, '',
       { baseKey:'bizone', baseDefault:bizoneBase });
   }
   aaviaBody += `<div class="sublbl">Classes</div>`;
   if (!englishDiscontinued) {
-    aaviaBody += ledgerRow('english','English (Sheetal)', english?'lump-sum installment due':'no payment due this month', english, !!md.paid.english,
-      fixedDeleteControl('english','English (Sheetal)'),
+    aaviaBody += ledgerRow('english','English (Sheetal)', english?'lump-sum installment due':'no payment due this month', english, !!md.paid.english, '',
       { baseKey:'english', baseDefault:english });
   }
   if (!swimDiscontinued) {
     aaviaBody += ledgerRow('swimming','Swimming',`₹${inr(swimBase)} flat if attended this month`, swimAmt, !!md.paid.swimming,
-      `<label class="chk-row"><input type="checkbox" ${md.swimmingAttended?'checked':''} onchange="toggleSwimming()"> Attended this month</label>${fixedDeleteControl('swimming','Swimming')}`,
+      `<label class="chk-row"><input type="checkbox" ${md.swimmingAttended?'checked':''} onchange="toggleSwimming()"> Attended this month</label>`,
       { baseKey:'swimming', baseDefault:swimBase });
   }
   if (!bharatDiscontinued) {
     aaviaBody += ledgerRow('bharatnatyam','Bharatnatyam',`₹${inr(bharatBase)} flat if attended this month`, bharatAmt, !!md.paid.bharatnatyam,
-      `<label class="chk-row"><input type="checkbox" ${md.bharatnatyamAttended?'checked':''} onchange="toggleBharatnatyam()"> Attended this month</label>${fixedDeleteControl('bharatnatyam','Bharatnatyam')}`,
+      `<label class="chk-row"><input type="checkbox" ${md.bharatnatyamAttended?'checked':''} onchange="toggleBharatnatyam()"> Attended this month</label>`,
       { baseKey:'bharatnatyam', baseDefault:bharatBase });
   }
   if (!chessDiscontinued) {
     aaviaBody += ledgerRow('chess','Chess',
       `₹${inr(chessRate)} × ${(md.chessDates||[]).length} class${(md.chessDates||[]).length===1?'':'es'}`,
       chessAmt, !!md.paid.chess,
-      dateChips(currentMonth, dim, md.chessDates||[], day => `toggleChessDate(${day})`) + fixedDeleteControl('chess','Chess'),
+      dateChips(currentMonth, dim, md.chessDates||[], day => `toggleChessDate(${day})`),
       { baseKey:'chessRate', baseDefault:chessRate });
   }
   if (!skateDiscontinued) {
     aaviaBody += ledgerRow('skating','Skating',
       `₹${inr(skateRate)} × ${(md.skatingDates||[]).length} class${(md.skatingDates||[]).length===1?'':'es'}`,
       skateAmt, !!md.paid.skating,
-      dateChips(currentMonth, dim, md.skatingDates||[], day => `toggleSkatingDate(${day})`) + fixedDeleteControl('skating','Skating'),
+      dateChips(currentMonth, dim, md.skatingDates||[], day => `toggleSkatingDate(${day})`),
       { baseKey:'skatingRate', baseDefault:skateRate });
   }
   aaviaBody += `<div class="sublbl">Miscellaneous</div>${miscItemList('aaviaMisc', md.aaviaMisc)}`;
@@ -394,9 +389,9 @@ function render() {
 
   // Fixed
   let fixedBody = '';
-  if (!sukanyaDiscontinued) fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',sukanyaAmt,!!md.paid.sukanya, fixedDeleteControl('sukanya','Sukanya Samriddhi'), { baseKey:'sukanya', baseDefault:sukanyaAmt });
-  if (!carEmiDiscontinued) fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi, fixedDeleteControl('carEmi','Car EMI'), { baseKey:'carEmi', baseDefault:carEmi });
-  if (!rentDiscontinued) fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, fixedDeleteControl('rent','Rent'), { baseKey:'rent', baseDefault:rent });
+  if (!sukanyaDiscontinued) fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',sukanyaAmt,!!md.paid.sukanya, '', { baseKey:'sukanya', baseDefault:sukanyaAmt });
+  if (!carEmiDiscontinued) fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi, '', { baseKey:'carEmi', baseDefault:carEmi });
+  if (!rentDiscontinued) fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, '', { baseKey:'rent', baseDefault:rent });
   fixedBody += customItemsSectionHtml(currentMonth, 'fixed', md, dim);
 
   // Household
@@ -411,11 +406,10 @@ function render() {
       <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div>${dateLabel(g.date)}</div>
       <div class="g-item-right">
         <span class="g-item-amt">₹${inr(g.amount)}</span>
-        <button class="base-edit-btn" title="Edit" onclick="openGroceryEdit(${i})">✎</button>
         ${g.paid
           ? `<div class="paid-grp"><button class="pbtn sm paid" onclick="toggleGroceryPaid(${i})">Paid</button>${pmChip(g.payMethod)}</div>`
           : `<button class="pbtn sm due" onclick="startPayment('grocery',${i})">Mark paid</button>`}
-        <button class="del-btn" onclick="deleteGrocery(${i})" aria-label="delete">×</button>
+        <button class="base-edit-btn" title="Edit" onclick="openGroceryEdit(${i})">✎</button>
       </div>
     </div>`;
   });
