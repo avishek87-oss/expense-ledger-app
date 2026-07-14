@@ -482,9 +482,10 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--onco
 .login-sub{font-family:var(--sans);font-size:14px;color:var(--muted);margin-bottom:28px}
 .login-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent}
 .login-err{font-family:var(--sans);font-size:13px;color:var(--maroon);margin-top:16px;min-height:18px}
-.pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-end;justify-content:center}
-.pay-overlay.hidden{display:none}
-.pay-sheet{background:var(--card);border-radius:16px 16px 0 0;padding:22px 20px 44px;width:100%;max-width:480px}
+.pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-end;justify-content:center;opacity:1;visibility:visible;transition:opacity .2s ease}
+.pay-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s ease,visibility 0s linear .2s}
+.pay-sheet{background:var(--card);border-radius:16px 16px 0 0;padding:22px 20px 44px;width:100%;max-width:480px;transform:translateY(0);transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.pay-overlay.hidden .pay-sheet{transform:translateY(30px)}
 .pay-sheet-title{font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;margin-bottom:16px;text-align:center}
 .pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .pmth-btn{background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:15px 12px;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:54px;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s;display:flex;align-items:center;justify-content:center;gap:8px}

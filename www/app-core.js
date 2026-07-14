@@ -365,6 +365,22 @@ function inr(n) {
   const v = Math.round((n + Number.EPSILON)*100)/100;
   return v.toLocaleString('en-IN',{ maximumFractionDigits:2 });
 }
+function prefersReducedMotion() {
+  try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; }
+}
+// Counts a ₹ figure up from 0 to its target — used for the Home hero number on
+// tab entry only (not on every data-change re-render, which would be noisy).
+function animateCountUp(el, target, duration=550) {
+  if (!el || prefersReducedMotion()) { if (el) el.textContent = '₹' + inr(target); return; }
+  const t0 = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = '₹' + inr(target * eased);
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
 function addMonths(mk, d) {
   const [y,m] = mk.split('-').map(Number);
   const dt = new Date(y, m-1+d, 1);

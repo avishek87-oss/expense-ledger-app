@@ -164,8 +164,11 @@ function collapsibleCard(id, title, subHtml, amountHtml, bodyHtml, barHtml) {
 }
 
 // ── Main render ────────────────────────────────────────────────────────────
+let prevRenderedTab = null; // used only to detect a fresh tab entry vs. a same-tab re-render
 function render() {
   const scrollY = window.scrollY;
+  const enteringHome = currentTab === 'home' && prevRenderedTab !== 'home';
+  prevRenderedTab = currentTab;
   applyTabChrome();
 
   const ml = monthLabel(currentMonth);
@@ -181,7 +184,7 @@ function render() {
   if (todayBtn) todayBtn.classList.toggle('hidden', currentMonth === todayMonthKey());
 
   if (currentTab === 'home') {
-    renderHome();
+    renderHome(enteringHome);
     window.scrollTo(0, scrollY);
     setSyncState(IN_GAS ? 'ok' : 'off');
     return;
@@ -481,7 +484,7 @@ function collectPaidItems(mk) {
 // Single at-a-glance screen: month spend, CC dues, Neha balance, budget status.
 // Every number here is read via the same helpers Ledger/Payments/CC/Neha/Budgets
 // already use — no new math, no new state, just a consolidated view.
-function renderHome() {
+function renderHome(animateNum) {
   const t = monthCategoryTotals(currentMonth);
   const paidTot = collectPaidItems(currentMonth).reduce((s,it)=>s+it.amount,0);
   const pendingTot = t.total - paidTot;
@@ -492,7 +495,7 @@ function renderHome() {
   <div class="hero-row">
     <div class="hero-lead">
       <div class="hero-lbl">Month spend</div>
-      <div class="hero-num">₹${inr(t.total)}</div>
+      <div class="hero-num" id="hero-month-num">₹${inr(t.total)}</div>
     </div>
     <div class="hero-stats">
       <div class="hstat tap" onclick="event.stopPropagation(); switchTab('ledger')"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
@@ -506,6 +509,7 @@ function renderHome() {
   </div>
   <div class="hero-spends-wrap"><div class="hero-spends">${heroSpendsHtml(currentMonth)}</div></div>
 </div>`;
+  if (animateNum) animateCountUp(document.getElementById('hero-month-num'), t.total);
 
   document.getElementById('app-body').innerHTML =
     homeCcCardHtml() + homeNehaCardHtml() + homeBudgetCardHtml();
