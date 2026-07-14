@@ -192,6 +192,28 @@
     <input id="search-inp" type="search" placeholder="Search all transactions…" oninput="renderSearch()" autocomplete="off">
     <button class="search-close" onclick="closeSearch()" aria-label="Close">✕</button>
   </div>
+  <div class="search-filters">
+    <button class="sf-chip" id="sf-unpaid" onclick="toggleSearchFilter('paid','unpaid')">Unpaid</button>
+    <button class="sf-chip" id="sf-paid" onclick="toggleSearchFilter('paid','paid')">Paid</button>
+    <select id="sf-cat" class="sel sf-select" onchange="setSearchFilter('cat',this.value)">
+      <option value="">Category</option>
+      <option value="groceries">Groceries</option>
+      <option value="householdGroceries">HH Groceries</option>
+      <option value="householdMisc">HH Misc</option>
+      <option value="aaviaMisc">Aavia</option>
+      <option value="nehaMisc">Neha</option>
+      <option value="avishekMisc">Avishek</option>
+      <option value="fixed">Fixed</option>
+    </select>
+    <select id="sf-via" class="sel sf-select" onchange="setSearchFilter('via',this.value)">
+      <option value="">Via</option>
+      <option value="axisCC">Axis CC</option>
+      <option value="scapiaCC">Scapia CC</option>
+      <option value="avishekBank">Avishek Bank</option>
+      <option value="nehaCash">Neha Cash</option>
+      <option value="nehaBank">Neha Bank</option>
+    </select>
+  </div>
   <div id="search-results"></div>
 </div>
 

@@ -209,7 +209,7 @@ function fixedSearchEntries(mk) {
   const out = [];
   const chk = (key, amount) => {
     if (isDiscontinued(key, mk)) return;
-    if (amount > 0) out.push({ mk, cat:'fixed', i:-1, text: fixedLabel(key), amount, paid: !!md.paid[key] });
+    if (amount > 0) out.push({ mk, cat:'fixed', i:-1, text: fixedLabel(key), amount, paid: !!md.paid[key], payMethod: (md.payMethod||{})[key] || null });
   };
   MAIDS.forEach(m => chk(m.key, maidPayout(effectiveBase(mk, m.key, m.base), md.maidLeaves[m.key] ?? 2, dim)));
   if (mk>='2026-08' && mk<='2026-10') chk('japaMaid', (28000/dim) * (md.japaDaysPresent ?? defaultJapaDays(mk)));
@@ -228,15 +228,28 @@ function fixedSearchEntries(mk) {
   });
   return out;
 }
+let searchFilters = { paid:'', cat:'', via:'' };
 function openSearch() {
   const overlay = document.getElementById('search-overlay');
   overlay.classList.remove('hidden');
   const inp = document.getElementById('search-inp');
-  inp.value = ''; renderSearch();
+  inp.value = '';
+  searchFilters = { paid:'', cat:'', via:'' };
+  document.getElementById('sf-cat').value = '';
+  document.getElementById('sf-via').value = '';
+  renderSearch();
   setTimeout(() => inp.focus(), 50);
   attachOverlayBackHandler('search-overlay', closeSearch);
 }
 function closeSearch() { document.getElementById('search-overlay').classList.add('hidden'); }
+function toggleSearchFilter(kind, val) {
+  searchFilters[kind] = searchFilters[kind] === val ? '' : val;
+  renderSearch();
+}
+function setSearchFilter(kind, val) {
+  searchFilters[kind] = val;
+  renderSearch();
+}
 function searchIndex() {
   return Object.keys(appState.months||{}).flatMap(mk => {
     const md = getMDFor(mk);
@@ -248,15 +261,25 @@ function searchIndex() {
 function renderSearch() {
   const q = (document.getElementById('search-inp').value || '').trim().toLowerCase();
   const box = document.getElementById('search-results');
-  if (!q) { box.innerHTML = `<div class="sr-empty">Type to search across all months.</div>`; return; }
+  document.getElementById('sf-unpaid').classList.toggle('active', searchFilters.paid === 'unpaid');
+  document.getElementById('sf-paid').classList.toggle('active', searchFilters.paid === 'paid');
+  const anyFilter = searchFilters.paid || searchFilters.cat || searchFilters.via;
+  if (!q && !anyFilter) { box.innerHTML = `<div class="sr-empty">Type to search, or use a filter above.</div>`; return; }
   const hits = searchIndex().filter(it => {
-    const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + (it.cat==='fixed' ? '' : ' ' + (it.amount||''))).toLowerCase();
-    return hay.includes(q);
+    if (q) {
+      const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + (it.cat==='fixed' ? '' : ' ' + (it.amount||''))).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (searchFilters.paid === 'unpaid' && it.paid) return false;
+    if (searchFilters.paid === 'paid' && !it.paid) return false;
+    if (searchFilters.cat && it.cat !== searchFilters.cat) return false;
+    if (searchFilters.via && it.payMethod !== searchFilters.via) return false;
+    return true;
   }).sort((a,b) => { // newest date first (fixed entries have no exact date — treat as start-of-month)
     const ka = a.date || (a.mk + '-01'), kb = b.date || (b.mk + '-01');
     return kb.localeCompare(ka);
   });
-  if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches for “${esc(q)}”.</div>`; return; }
+  if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches${q?` for “${esc(q)}”`:''}.</div>`; return; }
   box.innerHTML = hits.slice(0, 100).map(it => {
     const name = it.cat === 'groceries' ? `${esc(it.vendor)} · ${esc(it.category)}` : esc(it.text||'');
     return `<div class="sr-item" onclick="jumpToSearch('${it.mk}')">
