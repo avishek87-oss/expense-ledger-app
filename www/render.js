@@ -470,18 +470,49 @@ function collectPaidItems(mk) {
 // Single at-a-glance screen: month spend, CC dues, Neha balance, budget status.
 // Every number here is read via the same helpers Ledger/Payments/CC/Neha/Budgets
 // already use — no new math, no new state, just a consolidated view.
-function renderHome(animateNum) {
+function renderHome() {
+  document.getElementById('summary').innerHTML = homeTwoPaneHtml();
+  document.getElementById('app-body').innerHTML = '';
+}
+function homeTwoPaneHtml() {
+  return `<div class="home-pane">
+    <div class="home-sidebar">${homeSidebarHtml()}</div>
+    <div class="home-content">${homeTileContentHtml()}</div>
+  </div>`;
+}
+function homeSidebarHtml() {
+  const tiles = [
+    { id: 'summary', label: 'Summary',        icon: svgSummary() },
+    { id: 'cc',      label: 'Credit\nCards',  icon: svgCreditCard() },
+    { id: 'neha',    label: 'Neha\nBank',     icon: svgBank() },
+    { id: 'trends',  label: 'Trends',         icon: svgTrends() },
+    { id: 'budgets', label: 'Budgets',        icon: svgBudget() },
+  ];
+  return tiles.map(t => `
+    <button class="home-tile${currentHomeTile===t.id?' active':''}" onclick="setHomeTile('${t.id}')">
+      <span class="home-tile-icon">${t.icon}</span>
+      <span class="home-tile-label">${t.label}</span>
+    </button>`).join('');
+}
+function homeTileContentHtml() {
+  switch (currentHomeTile) {
+    case 'cc':      return ccSectionHtml();
+    case 'neha':    return nehaBankSectionHtml();
+    case 'trends':  return trendsSectionHtml();
+    case 'budgets': return budgetsSectionHtml();
+    default:        return homeSummaryContentHtml();
+  }
+}
+function homeSummaryContentHtml() {
   const t = monthCategoryTotals(currentMonth);
   const paidTot = collectPaidItems(currentMonth).reduce((s,it)=>s+it.amount,0);
   const pendingTot = t.total - paidTot;
   const pct = t.total>0 ? Math.round(paidTot/t.total*100) : 0;
-
-  document.getElementById('summary').innerHTML = `
-<div class="hero${heroSpendsOpen?' expanded':''}" onclick="toggleHeroSpends()">
+  return `<div class="hero${heroSpendsOpen?' expanded':''}" onclick="toggleHeroSpends()">
   <div class="hero-row">
     <div class="hero-lead">
       <div class="hero-lbl">Month spend</div>
-      <div class="hero-num" id="hero-month-num">₹${inr(t.total)}</div>
+      <div class="hero-num">₹${inr(t.total)}</div>
     </div>
     <div class="hero-stats">
       <div class="hstat tap" onclick="event.stopPropagation(); switchTab('ledger')"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
@@ -495,10 +526,21 @@ function renderHome(animateNum) {
   </div>
   <div class="hero-spends-wrap"><div class="hero-spends">${heroSpendsHtml(currentMonth)}</div></div>
 </div>`;
-  if (animateNum) animateCountUp(document.getElementById('hero-month-num'), t.total);
-
-  document.getElementById('app-body').innerHTML =
-    homeCcCardHtml() + homeNehaCardHtml() + homeBudgetCardHtml();
+}
+function svgSummary() {
+  return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>`;
+}
+function svgCreditCard() {
+  return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>`;
+}
+function svgBank() {
+  return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 9 12 3 21 9"/><rect x="3" y="9" width="18" height="11"/><line x1="3" y1="20" x2="21" y2="20"/><line x1="9" y1="13" x2="9" y2="16"/><line x1="15" y1="13" x2="15" y2="16"/></svg>`;
+}
+function svgTrends() {
+  return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`;
+}
+function svgBudget() {
+  return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2 A10 10 0 0 1 22 12 L12 12 Z" fill="currentColor" stroke="none"/><line x1="12" y1="12" x2="6.3" y2="19.1"/></svg>`;
 }
 function homeCcCardHtml() {
   const cards = Object.keys(CC_CYCLES).map(cardKey => {

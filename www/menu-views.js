@@ -419,10 +419,6 @@ function renderMenu() {
   }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
-    <a class="menu-link" onclick="setMenuView('trends')">Trends <span>›</span></a>
-    <a class="menu-link" onclick="setMenuView('budgets')">Budgets <span>›</span></a>
-    <a class="menu-link" onclick="setMenuView('cc')">Credit Card Payments <span>›</span></a>
-    <a class="menu-link" onclick="setMenuView('neha')">Neha Bank Balance <span>›</span></a>
     <a class="menu-link" onclick="openAddFixedItem()">Add Fixed Expense <span>›</span></a>
     <a class="menu-link" onclick="openTrashView()">Recently Deleted <span>›</span></a>
     <a class="menu-link" onclick="openActivityView()">Activity <span>›</span></a>
@@ -531,6 +527,7 @@ function nehaBankSectionHtml() {
       <span class="cc-out ${balance>=0?'ok':'due'}">₹${inr(balance)} <small>balance</small></span>
     </div>
     ${nehaBalanceEditControl(nb.initialBalance)}
+    <button class="add-btn" style="width:100%;margin:10px 0 4px" onclick="openUpiBalance()">↗ Check Balance via UPI</button>
     <div class="cc-cyc" style="cursor:default">
       <div class="cc-cyc-l"><div class="cc-cyc-win">Transfers (net)</div></div>
       <div class="cc-cyc-amt">${transferNet>=0?'+':'−'}₹${inr(Math.abs(transferNet))}</div>
@@ -562,6 +559,11 @@ function nehaBankSectionHtml() {
   }
   html += `</section>`;
   return html;
+}
+
+function openUpiBalance() {
+  sessionStorage.setItem('upi-balance-pending', '1');
+  window.open('upi://pay', '_system');
 }
 
 // ── Budgets menu view ──────────────────────────────────────────────────────

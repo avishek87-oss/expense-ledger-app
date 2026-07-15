@@ -330,9 +330,22 @@ setInterval(() => {
 }, 45000);
 
 // Re-lock every time the native app resumes from the background.
+// Also handle UPI balance check return: if the user went to a UPI app to check
+// balance, prompt them to enter it when they come back.
 (() => {
   const App = getNativePlugin('App');
-  if (App && App.addListener) App.addListener('resume', () => { requireLock(); });
+  if (App && App.addListener) App.addListener('resume', () => {
+    requireLock();
+    if (sessionStorage.getItem('upi-balance-pending')) {
+      sessionStorage.removeItem('upi-balance-pending');
+      const cur = nehaBankBalance();
+      const raw = prompt(`Enter your current Neha Bank balance (current: ₹${inr(cur)}):`);
+      if (raw !== null && raw.trim() !== '') {
+        const val = parseFloat(raw.replace(/,/g, ''));
+        if (!isNaN(val)) { setNehaInitialBalance(val); render(); }
+      }
+    }
+  });
 })();
 
 // Hardware back button: pop the Ledger category drill-down before anything else

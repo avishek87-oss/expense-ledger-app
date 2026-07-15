@@ -116,12 +116,6 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 .hero-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:rgba(247,244,236,.6);font-weight:600}
 .hero-num{font-family:var(--mono);font-size:36px;font-weight:600;letter-spacing:-0.02em;margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
 .hero-num.g{color:#a9c6a9}
-/* 5 payment methods can be wider than the hero on a phone. Keep the row inside
-   the hero (scroll it horizontally rather than letting it spill) so it never
-   pushes document-level horizontal overflow — which in the Cloud Dancer theme
-   (overflow:visible hero) spilled "N·Bank" out of the card and dragged a
-   horizontal scrollbar across the fixed bottom nav. min-width:0 lets a flex
-   item actually honor overflow-x. */
 .hero-stats{display:flex;gap:26px;padding-bottom:3px;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .hero-stats::-webkit-scrollbar{display:none}
 .hstat .k{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(247,244,236,.55);font-weight:600}
@@ -144,6 +138,15 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 .hspend-row.due span{color:#e8a39c}
 .hero-foot{display:flex;align-items:baseline;justify-content:space-between;margin-top:9px;font-family:var(--sans);font-size:11px;color:rgba(247,244,236,.6)}
 .hero-foot .mono{color:rgba(247,244,236,.82)}
+
+/* ── Home split-pane layout ── */
+.home-pane{display:flex;align-items:stretch;min-height:calc(100dvh - 112px)}
+.home-sidebar{width:76px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.home-content{flex:1;overflow-y:auto;padding:8px;min-width:0}
+.home-tile{width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;border-left:3px solid transparent;cursor:pointer;padding:14px 4px;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.home-tile.active{background:rgba(100,120,255,.1);border-left-color:var(--accent)}
+.home-tile-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff}
+.home-tile-label{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--ink);text-align:center;line-height:1.3;white-space:pre-line}
 
 /* ── Toolbar ── */
 .toolbar{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:16px 4px 4px;position:sticky;top:var(--toolbar-top);background:var(--bg);z-index:99;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
