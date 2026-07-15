@@ -568,12 +568,12 @@ function openUpiBalance() {
 
 // ── Budgets menu view ──────────────────────────────────────────────────────
 let budgetEditCat = null;
-function startBudgetEdit(cat) { budgetEditCat = cat; renderMenu(); }
-function cancelBudgetEdit()   { budgetEditCat = null; renderMenu(); }
+function startBudgetEdit(cat) { budgetEditCat = cat; render(); }
+function cancelBudgetEdit()   { budgetEditCat = null; render(); }
 function saveBudgetEdit(cat) {
   const inp = document.getElementById('budget-inp-'+cat);
   budgetEditCat = null;
-  if (inp) setBudget(cat, inp.value); else renderMenu();
+  if (inp) setBudget(cat, inp.value); else render();
 }
 function budgetsSectionHtml() {
   const budgets = getBudgets();

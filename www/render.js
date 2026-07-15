@@ -508,23 +508,23 @@ function homeSummaryContentHtml() {
   const paidTot = collectPaidItems(currentMonth).reduce((s,it)=>s+it.amount,0);
   const pendingTot = t.total - paidTot;
   const pct = t.total>0 ? Math.round(paidTot/t.total*100) : 0;
-  return `<div class="hero${heroSpendsOpen?' expanded':''}" onclick="toggleHeroSpends()">
+  return `<div class="hero">
   <div class="hero-row">
     <div class="hero-lead">
       <div class="hero-lbl">Month spend</div>
       <div class="hero-num">₹${inr(t.total)}</div>
     </div>
     <div class="hero-stats">
-      <div class="hstat tap" onclick="event.stopPropagation(); switchTab('ledger')"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
-      <div class="hstat tap" onclick="event.stopPropagation(); switchTab('outstanding')"><div class="k">Pending</div><div class="v">₹${inr(pendingTot)}</div></div>
+      <div class="hstat tap" onclick="switchTab('ledger')"><div class="k">Paid</div><div class="v g">₹${inr(paidTot)}</div></div>
+      <div class="hstat tap" onclick="switchTab('outstanding')"><div class="k">Pending</div><div class="v">₹${inr(pendingTot)}</div></div>
     </div>
   </div>
   <div class="hero-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
   <div class="hero-foot">
     <span><span class="mono">${pct}%</span> settled</span>
-    <span style="display:flex;align-items:center;gap:4px">${monthLabel(currentMonth)}<span class="hero-chev">⌄</span></span>
+    <span>${monthLabel(currentMonth)}</span>
   </div>
-  <div class="hero-spends-wrap"><div class="hero-spends">${heroSpendsHtml(currentMonth)}</div></div>
+  ${heroSpendsHtml(currentMonth)}
 </div>`;
 }
 function svgSummary() {
