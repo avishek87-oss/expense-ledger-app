@@ -406,6 +406,17 @@ function renderMenu() {
     el.innerHTML = `<button class="menu-home-btn" onclick="setMenuView('home')">← Home</button>` + activitySectionHtml();
     return;
   }
+  if (menuView === 'settings') {
+    if (titleEl) titleEl.textContent = 'Settings';
+    el.innerHTML = `
+      <button class="menu-home-btn" onclick="setMenuView('home')">← Menu</button>
+      <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
+      <a class="menu-link" onclick="cycleLockEnabled()">Screen Lock <span>${lockLabel()}</span></a>
+      <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
+      <a class="menu-link" onclick="cycleStyle()">Theme <span>${styleLabel()}</span></a>
+    `;
+    return;
+  }
   if (titleEl) titleEl.textContent = 'Menu';
   el.innerHTML = `
     <a class="menu-link" onclick="setMenuView('trends')">Trends <span>›</span></a>
@@ -415,10 +426,7 @@ function renderMenu() {
     <a class="menu-link" onclick="openAddFixedItem()">Add Fixed Expense <span>›</span></a>
     <a class="menu-link" onclick="openTrashView()">Recently Deleted <span>›</span></a>
     <a class="menu-link" onclick="openActivityView()">Activity <span>›</span></a>
-    <a class="menu-link" onclick="cycleNotifications()">Notifications <span>${notificationsLabel()}</span></a>
-    <a class="menu-link" onclick="cycleLockEnabled()">Screen Lock <span>${lockLabel()}</span></a>
-    <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
-    <a class="menu-link" onclick="cycleStyle()">Theme <span>${styleLabel()}</span></a>
+    <a class="menu-link" onclick="setMenuView('settings')">Settings <span>›</span></a>
     <a class="menu-link danger" onclick="signOut()">Sign out</a>
   `;
 }
