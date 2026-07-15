@@ -197,7 +197,7 @@ async function pullFromSheets() {
     if (pushBusy || pushDirty || syncTimer) { setSyncState('ok'); return; }
     if (j && j.ok) {
       const remote = JSON.parse(j.data);
-      if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; saveLocal(); render(); renderMenu(); }
+      if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; migrateGroceries(); saveLocal(); render(); renderMenu(); }
       setSyncState('ok');
     } else setSyncState('err');
   } catch (e) {

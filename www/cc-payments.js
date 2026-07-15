@@ -57,7 +57,6 @@ function getOutstandingItems() {
         activeCustomItems(mk, section).forEach(it => chk(it.label, customItemAmount(mk, it.key, it), it.key, 'custom'));
       });
 
-      (md.groceries||[]).forEach((g,i) => { if (!g.paid) due.push({ label:`${g.vendor} (${g.category})`, sub:g.date||'', amount:g.amount, toggleType:'item', toggleKey:'groceries', toggleIdx:i }); });
       (md.householdGroceries||[]).forEach((it,i) => { if (!it.paid) due.push({ label:'HH Groceries — '+it.text, sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'householdGroceries', toggleIdx:i }); });
       (md.householdMisc||[]).forEach((it,i)      => { if (!it.paid) due.push({ label:'HH Misc — '+it.text,      sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'householdMisc',      toggleIdx:i }); });
       (md.nehaMisc||[]).forEach((it,i)    => { if (!it.paid) due.push({ label:'Neha — '+it.text,    sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'nehaMisc',    toggleIdx:i }); });
@@ -205,12 +204,6 @@ function confirmPay(method) {
     const item = (md[cat]||[])[idx];
     updateMonth({ [cat]:(md[cat]||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
       item && `paid ₹${item.amount} ${cat} (${item.text}) via ${methodLabel}`);
-  } else if (type === 'grocery') {
-    const [idx] = args;
-    const md = getMD();
-    const item = (md.groceries||[])[idx];
-    updateMonth({ groceries:(md.groceries||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
-      item && `paid ₹${item.amount} groceries (${item.vendor}) via ${methodLabel}`);
   } else if (type === 'outFixed') {
     const [mk, key, amt] = args;
     const md = getMDFor(mk);
@@ -302,32 +295,9 @@ function cancelItemEdit() {
 function deleteItemFromEdit() {
   const pe = pendingItemEdit;
   if (!pe) return;
-  if (pe.kind === 'grocery') deleteGrocery(pe.idx);
-  else if (pe.kind === 'misc') deleteMiscItem(pe.cat, pe.idx);
+  if (pe.kind === 'misc') deleteMiscItem(pe.cat, pe.idx);
   else if (pe.kind === 'fixed') discontinueFixedItem(pe.key, pe.label);
   cancelItemEdit();
-}
-function ieShowGroceryFields(isGrocery) {
-  document.getElementById('ie-name').style.display = isGrocery ? 'none' : 'block';
-  document.getElementById('ie-grocery-row').style.display = isGrocery ? 'flex' : 'none';
-}
-function openGroceryEdit(i) {
-  const md = getMD();
-  const it = (md.groceries||[])[i];
-  if (!it) return;
-  pendingItemEdit = { kind:'grocery', idx:i, chosenMethod:null };
-  document.getElementById('ie-title').textContent = 'Edit grocery item';
-  ieShowGroceryFields(true);
-  document.getElementById('ie-vendor').value = it.vendor;
-  document.getElementById('ie-cat').value = it.category;
-  document.getElementById('ie-date').value = it.date || '';
-  const amtInput = document.getElementById('ie-amount');
-  amtInput.value = Math.round(it.amount); amtInput.disabled = false;
-  const chk = document.getElementById('ie-paid');
-  chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
-  ieSetPaidMethodLabel(it.paid ? it.payMethod : null);
-  document.getElementById('ie-delete-btn').textContent = 'Delete item';
-  openItemEditOverlay();
 }
 function openMiscEdit(cat, i) {
   const md = getMD();
@@ -335,7 +305,6 @@ function openMiscEdit(cat, i) {
   if (!it) return;
   pendingItemEdit = { kind:'misc', cat, idx:i, chosenMethod:null };
   document.getElementById('ie-title').textContent = 'Edit item';
-  ieShowGroceryFields(false);
   const nameInput = document.getElementById('ie-name');
   nameInput.value = it.text || ''; nameInput.disabled = false;
   document.getElementById('ie-date').value = it.date || '';
@@ -355,7 +324,6 @@ function openFixedItemEdit(key, label, baseKey, baseDefault, nameEditable, amoun
   const amount = amountEditable ? effectiveBase(currentMonth, baseKey, baseDefault) : baseDefault;
   pendingItemEdit = { kind:'fixed', key, baseKey, label, nameEditable, amountEditable, chosenMethod:null };
   document.getElementById('ie-title').textContent = 'Edit ' + label;
-  ieShowGroceryFields(false);
   const nameInput = document.getElementById('ie-name');
   nameInput.value = label; nameInput.disabled = !nameEditable;
   document.getElementById('ie-date').value = (md.payDate||{})[key] || '';
@@ -428,27 +396,18 @@ function saveItemEdit() {
     alert('Choose a payment method'); return;
   }
 
-  if (pe.kind === 'grocery' || pe.kind === 'misc') {
+  if (pe.kind === 'misc') {
     const amount = Math.round(Number(document.getElementById('ie-amount').value)||0);
     if (!(amount > 0)) { alert('Amount is required'); return; }
-    const cat = pe.kind === 'grocery' ? 'groceries' : pe.cat;
+    const cat = pe.cat;
     const md = getMD();
     const it = (md[cat]||[])[pe.idx];
     if (!it) { cancelItemEdit(); return; }
     const payMethod = paidChecked ? (pe.chosenMethod || it.payMethod || null) : null;
-    let patch, logName;
-    if (pe.kind === 'grocery') {
-      const vendor = document.getElementById('ie-vendor').value;
-      const category = document.getElementById('ie-cat').value;
-      patch = { ...it, vendor, category, amount, date, paid:paidChecked, payMethod };
-      logName = vendor;
-    } else {
-      const text = (document.getElementById('ie-name').value||'').trim();
-      if (!text) { alert('Name is required'); return; }
-      patch = { ...it, text, amount, date, paid:paidChecked, payMethod };
-      logName = text;
-    }
-    applyItemPatch(cat, pe.idx, patch, date, `edited ₹${amount} ${cat} (${logName})`);
+    const text = (document.getElementById('ie-name').value||'').trim();
+    if (!text) { alert('Name is required'); return; }
+    const patch = { ...it, text, amount, date, paid:paidChecked, payMethod };
+    applyItemPatch(cat, pe.idx, patch, date, `edited ₹${amount} ${cat} (${text})`);
   } else if (pe.kind === 'fixed') {
     const md = getMD();
     const payMethod = paidChecked ? (pe.chosenMethod || (md.payMethod||{})[pe.key] || null) : null;
@@ -565,7 +524,7 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   // Collect array-based transactions (editable)
   Object.keys(appState.months||{}).forEach(mk => {
     const md = getMDFor(mk);
-    ['groceries','householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'].forEach(cat => {
+    ['householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'].forEach(cat => {
       (md[cat]||[]).forEach((it, i) => {
         if (it.paid && it.payMethod === cardKey) {
           const txnDate = new Date(it.date);
@@ -762,7 +721,7 @@ function ccCycleOf(cardKey, dateStr) {
 // All charges booked to a card across every month.
 function ccChargesFor(cardKey) {
   const charges = [];
-  const arrays = ['aaviaMisc','groceries','householdGroceries','householdMisc','nehaMisc','avishekMisc'];
+  const arrays = ['aaviaMisc','householdGroceries','householdMisc','nehaMisc','avishekMisc'];
   const fixedAmt = {
     schoolFees: mk => schoolTuition(mk)+schoolTermFee(mk)+schoolBusFee(mk),
     bizone:     mk => bizoneFee(mk),

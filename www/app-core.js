@@ -82,6 +82,7 @@ const IN_GAS = GAS_URL.startsWith('https://') && IS_NATIVE;
 let appState = { months: {} };
 let currentMonth = todayMonthKey();
 let currentTab = 'home';
+let ledgerDrilldown = null; // null | 'household'|'neha'|'aavia'|'avishek'|'maids'|'fixed'
 let syncTimer = null;
 let uiPrefs = { collapsed: {} };
 let pendingPay = null;
@@ -129,7 +130,6 @@ function emptyMonth() {
     bharatnatyamAttended:false,
     chessDates:[],
     skatingDates:[],
-    groceries:[],
     householdGroceries:[],
     householdMisc:[],
     aaviaMisc:[],
@@ -588,6 +588,18 @@ function esc(s) {
 // ── Tab / navigation ───────────────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
+  ledgerDrilldown = null; // always land on the Ledger button grid, never mid-drilldown
+  window.scrollTo(0,0);
+  render();
+}
+function openLedgerCategory(id) {
+  ledgerDrilldown = id;
+  window.scrollTo(0,0);
+  render();
+}
+function closeLedgerDrilldown() {
+  if (!ledgerDrilldown) return;
+  ledgerDrilldown = null;
   window.scrollTo(0,0);
   render();
 }
@@ -703,20 +715,28 @@ function toggleCustomClassDate(key, day) {
   updateMonth({ customClassDates: { ...(md.customClassDates||{}), [key]: nextDates } }, `toggled ${fixedLabel(key)} class date ${day}`);
 }
 
-// ── Grocery ────────────────────────────────────────────────────────────────
 function clampMonth(mk) { return (mk && mk >= MIN_MONTH) ? mk : MIN_MONTH; }
-function toggleGroceryPaid(i) {
-  // Only called to UNMARK; marking goes through startPayment
-  const md = getMD();
-  const item = (md.groceries||[])[i];
-  updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
-    item && `unmarked ₹${item.amount} groceries (${item.vendor}) as paid`);
-}
-function deleteGrocery(i) {
-  const md = getMD();
-  const item = (md.groceries||[])[i];
-  if (item) moveToTrash({ kind:'month', mk: currentMonth, cat:'groceries', item });
-  updateMonth({ groceries:(md.groceries||[]).filter((_,idx)=>idx!==i) }, 'deleted a grocery item');
+
+// ── Groceries → Household Groceries migration ──────────────────────────────
+// The old "Veges/Fruits — Sagar & Ajit" vendor-tracked groceries array was
+// merged into the plain-text Household Groceries list. Any month still
+// carrying a `groceries` array (old data, or a pull from a device on an
+// older app version) gets folded in here; idempotent since a month with an
+// already-empty/absent `groceries` array is a no-op.
+function migrateGroceries() {
+  let changed = false;
+  Object.keys(appState.months||{}).forEach(mk => {
+    const m = appState.months[mk];
+    if (!m || !m.groceries || !m.groceries.length) return;
+    const converted = m.groceries.map(g => ({
+      text: `${g.vendor} · ${g.category}`, amount: g.amount, date: g.date,
+      paid: g.paid, payMethod: g.payMethod
+    }));
+    m.householdGroceries = [...(m.householdGroceries||[]), ...converted];
+    delete m.groceries;
+    changed = true;
+  });
+  if (changed) saveLocal();
 }
 
 // ── Misc items ─────────────────────────────────────────────────────────────

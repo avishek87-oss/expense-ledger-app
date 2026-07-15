@@ -19,7 +19,7 @@ function monthCategoryTotals(mk) {
     + (isDiscontinued('rent',mk) ? 0 : effectiveBase(mk,'rent',rentFee(mk)))
     + customSectionTotal(mk, 'fixed');
   const sum = arr => (arr||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-  const household = sum(md.groceries) + sum(md.householdGroceries) + sum(md.householdMisc) + customSectionTotal(mk, 'household');
+  const household = sum(md.householdGroceries) + sum(md.householdMisc) + customSectionTotal(mk, 'household');
   const neha = sum(md.nehaMisc) + customSectionTotal(mk, 'neha');
   const avishek = sum(md.avishekMisc) + customSectionTotal(mk, 'avishek');
   return { maids, aavia, fixed, household, neha, avishek, total: maids+aavia+fixed+household+neha+avishek };
@@ -104,11 +104,6 @@ let fabShortcuts = [];
 function topQuickAddShortcuts() {
   const counts = {};
   Object.values(appState.months||{}).forEach(md => {
-    (md.groceries||[]).forEach(it => {
-      if (!it.vendor) return;
-      const key = 'groceries|' + it.vendor + '|' + it.category;
-      counts[key] = (counts[key]||0) + 1;
-    });
     ['householdGroceries','householdMisc','nehaMisc','avishekMisc','aaviaMisc'].forEach(cat => {
       (md[cat]||[]).forEach(it => {
         const text = (it.text||'').trim();
@@ -122,10 +117,8 @@ function topQuickAddShortcuts() {
     .sort((a,b) => b[1]-a[1])
     .slice(0,3)
     .map(([key,count]) => {
-      const [bucket, a, b] = key.split('|');
-      return bucket === 'groceries'
-        ? { bucket, vendor:a, category:b, label:`${a} · ${b}`, count }
-        : { bucket, text:b, label:b, count };
+      const [bucket, , b] = key.split('|');
+      return { bucket, text:b, label:b, count };
     });
 }
 function openFabShortcuts() {
@@ -143,35 +136,21 @@ function applyFabShortcut(i) {
   closeFabShortcuts();
   if (!s) return;
   openQuickAdd();
-  const bucketSel = document.getElementById('qa-bucket');
-  bucketSel.value = s.bucket;
-  qaBucketChanged();
-  if (s.bucket === 'groceries') {
-    document.getElementById('qa-vendor').value = s.vendor;
-    document.getElementById('qa-cat').value = s.category;
-  } else {
-    document.getElementById('qa-text').value = s.text;
-  }
+  document.getElementById('qa-bucket').value = s.bucket;
+  document.getElementById('qa-text').value = s.text;
 }
 
 // ── Quick-add (floating +) ─────────────────────────────────────────────────
-const QA_GROCERY = 'groceries';
 function openQuickAdd() {
   document.getElementById('qa-text').value = '';
   document.getElementById('qa-amt').value = '';
   document.getElementById('qa-date').value = today();
   document.getElementById('qa-paid').checked = false;
-  qaBucketChanged();
   const overlay = document.getElementById('qa-overlay');
   overlay.classList.remove('hidden');
   attachOverlayBackHandler('qa-overlay', closeQuickAdd);
 }
 function closeQuickAdd() { document.getElementById('qa-overlay').classList.add('hidden'); }
-function qaBucketChanged() {
-  const isGrocery = document.getElementById('qa-bucket').value === QA_GROCERY;
-  document.getElementById('qa-grocery-fields').style.display = isGrocery ? 'flex' : 'none';
-  document.getElementById('qa-text').style.display = isGrocery ? 'none' : 'block';
-}
 function submitQuickAdd() {
   const bucket = document.getElementById('qa-bucket').value;
   const amt  = Number(document.getElementById('qa-amt').value);
@@ -179,25 +158,20 @@ function submitQuickAdd() {
   if (!(amt > 0)) return;
   const mk = clampMonth(monthKeyOf(date));
   const tmd = getMDFor(mk);
-  let entry;
-  if (bucket === QA_GROCERY) {
-    entry = { vendor: document.getElementById('qa-vendor').value, category: document.getElementById('qa-cat').value, amount: Math.round(amt), date, paid:false };
-  } else {
-    const text = (document.getElementById('qa-text').value || '').trim();
-    if (!text) return;
-    entry = { text, amount: Math.round(amt), date, paid:false };
-  }
+  const text = (document.getElementById('qa-text').value || '').trim();
+  if (!text) return;
+  const entry = { text, amount: Math.round(amt), date, paid:false };
   if (document.getElementById('qa-paid').checked) {
     startPayment('quickAdd', mk, bucket, entry);
     return;
   }
   updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), entry] },
-    `added ₹${entry.amount} ${bucket} (${entry.vendor||entry.text})`);
+    `added ₹${entry.amount} ${bucket} (${entry.text})`);
   closeQuickAdd();
 }
 
 // ── Search (all transactions, all months) ──────────────────────────────────
-const SEARCH_CATS = { groceries:'Groceries', householdGroceries:'HH Groceries', householdMisc:'HH Misc', aaviaMisc:'Aavia', nehaMisc:'Neha', avishekMisc:'Avishek', fixed:'Fixed' };
+const SEARCH_CATS = { householdGroceries:'HH Groceries', householdMisc:'HH Misc', aaviaMisc:'Aavia', nehaMisc:'Neha', avishekMisc:'Avishek', fixed:'Fixed' };
 // Synthetic search entries for "fixed" ledger items (rent, maids, sukanya, etc.) —
 // these aren't stored as discrete array items like groceries/misc, so this mirrors
 // getOutstandingItems()'s per-item amount math but includes paid items too (search
@@ -281,7 +255,7 @@ function renderSearch() {
   });
   if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches${q?` for “${esc(q)}”`:''}.</div>`; return; }
   box.innerHTML = hits.slice(0, 100).map(it => {
-    const name = it.cat === 'groceries' ? `${esc(it.vendor)} · ${esc(it.category)}` : esc(it.text||'');
+    const name = esc(it.text||'');
     return `<div class="sr-item" onclick="jumpToSearch('${it.mk}')">
       <div><div class="sr-name">${name}</div><div class="sr-sub">${SEARCH_CATS[it.cat]} · ${monthShort(it.mk)}${it.date?' · '+fmtDate(it.date):''}</div></div>
       <span class="sr-amt ${it.paid?'paid':'due'}">₹${inr(it.amount)}</span>
@@ -297,8 +271,8 @@ function jumpToSearch(mk) {
 // ── Swipe actions on Ledger rows (delegated on #app-body) ──────────────────
 let swipe = null;
 function swipeStart(e) {
-  const row = e.target.closest('.mitem, .g-item');
-  if (!row || !row.dataset.cat || currentTab !== 'ledger') { swipe = null; return; }
+  const row = e.target.closest('.mitem, .lrow');
+  if (!row || (!row.dataset.cat && !row.dataset.key) || currentTab !== 'ledger') { swipe = null; return; }
   // Don't hijack taps that start on an interactive control inside the row.
   if (e.target.closest('button, input, select, .date-chip')) { swipe = null; return; }
   const t = e.touches[0];
@@ -327,10 +301,17 @@ function swipeEnd() {
   row.style.transform = '';
   row.style.background = '';
   if (lock !== 'h') return;
-  const cat = row.dataset.cat, idx = Number(row.dataset.idx);
   const TH = 90;
-  if (dx < -TH)      { doHaptic(); cat === 'groceries' ? deleteGrocery(idx)       : deleteMiscItem(cat, idx); }
-  else if (dx > TH)  { doHaptic(); cat === 'groceries' ? startPayment('grocery', idx) : startPayment('misc', cat, idx); }
+  if (row.classList.contains('lrow')) {
+    // Fixed/maids/Aavia-class rows have no delete — right = pay/change method, left = unmark paid.
+    const key = row.dataset.key, amount = Number(row.dataset.amount), paid = row.dataset.paid === 'true';
+    if (dx > TH)       { doHaptic(); startPayment('fixed', key, amount); }
+    else if (dx < -TH && paid) { doHaptic(); togglePaid(key); }
+    return;
+  }
+  const cat = row.dataset.cat, idx = Number(row.dataset.idx);
+  if (dx < -TH)      { doHaptic(); deleteMiscItem(cat, idx); }
+  else if (dx > TH)  { doHaptic(); startPayment('misc', cat, idx); }
 }
 function doHaptic(type='impact') {
   const Haptics = getNativePlugin('Haptics');
@@ -356,7 +337,7 @@ function monthSwipeStart(e) {
   // Exclude rows (their own swipe above) and specific action controls, but NOT
   // .card-hd — it's a <button> too, yet is most of the screen's open surface,
   // and a tap (near-zero movement) still reaches its onclick normally either way.
-  if (e.target.closest('.mitem, .g-item, .pbtn, .base-edit-btn, .del-btn, .sbtn, .chip, input, select, .date-chip')) { monthSwipe = null; return; }
+  if (e.target.closest('.mitem, .lrow, .pbtn, .base-edit-btn, .del-btn, .sbtn, .chip, input, select, .date-chip')) { monthSwipe = null; return; }
   const t = e.touches[0];
   monthSwipe = { x0:t.clientX, y0:t.clientY, dx:0, lock:null };
 }

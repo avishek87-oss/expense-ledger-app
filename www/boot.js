@@ -246,6 +246,7 @@ async function scheduleNotifications() {
 
 async function boot() {
   loadLocal();
+  migrateGroceries();
   loadUI();
   applyTheme();
   applyStyle();
@@ -332,4 +333,18 @@ setInterval(() => {
 (() => {
   const App = getNativePlugin('App');
   if (App && App.addListener) App.addListener('resume', () => { requireLock(); });
+})();
+
+// Hardware back button: pop the Ledger category drill-down before anything else
+// gets a chance to (e.g. exiting the app). Skipped if any overlay is already
+// open — that overlay's own attachOverlayBackHandler() owns the back press instead.
+(() => {
+  const App = getNativePlugin('App');
+  if (!App || !App.addListener) return;
+  App.addListener('backButton', () => {
+    if (!ledgerDrilldown) return;
+    const overlayOpen = Array.from(document.querySelectorAll('[id$="-overlay"]'))
+      .some(el => !el.classList.contains('hidden'));
+    if (!overlayOpen) closeLedgerDrilldown();
+  });
 })();

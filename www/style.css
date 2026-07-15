@@ -186,6 +186,16 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 .card-body{padding:0 18px}
 .card.open .card-body{padding-bottom:8px}
 
+/* ── Ledger tab: category button grid + drill-down detail page ── */
+.ledger-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ledger-cat-btn{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent;padding:16px;display:flex;flex-direction:column;gap:6px;min-height:44px}
+.lcb-title{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);letter-spacing:-0.01em}
+.lcb-sub{font-family:var(--sans);font-size:11px}
+.lcb-amt{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;margin-top:2px}
+.ledger-back-btn{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ink);background:none;border:none;cursor:pointer;padding:14px 2px;-webkit-tap-highlight-color:transparent}
+.ledger-detail-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 2px 14px}
+.ledger-detail-body{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:0 18px;overflow:hidden}
+
 /* ── Ledger row ── */
 .lrow{border-top:1px solid var(--line)}
 .card-body>.lrow:first-child,.card-body>.sublbl:first-child{border-top:none}
@@ -194,18 +204,20 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 .lrow-label{font-size:17px;font-weight:600;color:var(--ink)}
 .lrow-sub{font-family:var(--sans);font-size:14px;color:var(--muted);margin-top:3px;line-height:1.4}
 .lrow-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.lrow-amt-col{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .lrow-amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
 .lrow-ctrl{padding:2px 0 14px;display:flex;flex-wrap:wrap;align-items:center;gap:14px}
 
 /* ── Paid toggle ── */
 .pbtn{font-family:var(--sans);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:9px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;min-height:44px;-webkit-tap-highlight-color:transparent;transition:background .15s,color .15s,border-color .15s}
-.pbtn.due{border:1px solid var(--maroon);background:transparent;color:var(--maroon)}
-.pbtn.due:hover{background:var(--maroon);color:var(--cream)}
-.pbtn.paid{border:1px solid var(--green);background:var(--green);color:var(--cream)}
-.pbtn.paid:hover{filter:brightness(1.1)}
 .pbtn.sm{font-size:11px;padding:8px 13px;min-height:40px}
 .pbtn.act{border:1px solid var(--green);background:var(--green);color:var(--cream)}
 .pbtn.act:hover{filter:brightness(1.1)}
+
+/* ── Paid/unpaid left-edge indicator (replaces the old Mark Paid/Paid button;
+   toggling now happens via swipe or the pencil edit sheet) ── */
+.lrow,.mitem{border-left:3px solid var(--maroon);padding-left:16px}
+.lrow[data-paid="true"],.mitem[data-paid="true"]{border-left-color:var(--green)}
 
 /* ── Stepper ── */
 .field{display:flex;align-items:center;gap:10px}
@@ -239,29 +251,23 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 .misc-txt:focus,.misc-amt:focus,.sel:focus{outline:none;border-color:var(--ink)}
 .add-btn{background:var(--ink);color:var(--cream);border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent;transition:filter .15s}
 .add-btn:hover{filter:brightness(1.25)}
-.mitem,.g-item{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:11px 0;gap:10px}
-.mitem-left,.g-item-left{min-width:0;flex:1}
+.mitem{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:11px 0;gap:10px}
+.mitem-left{min-width:0;flex:1}
 .mitem-txt{font-size:15px;color:var(--ink)}
-.g-item-txt{font-family:var(--sans);font-size:14px;color:var(--ink-soft)}
-.mitem-date,.g-item-date{font-family:var(--sans);font-size:12px;color:var(--faint);margin-top:2px}
+.mitem-date{font-family:var(--sans);font-size:12px;color:var(--faint);margin-top:2px}
 .item-date-inp{border:none;background:none;color:var(--muted);font-family:var(--sans);padding:2px 0;margin-top:1px;min-height:26px}
 .date-chip{position:relative;display:inline-flex;align-items:center;margin-top:2px}
 .date-chip-lbl{font-family:var(--sans);font-size:12px;color:var(--muted);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px}
 .date-chip-inp{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;margin:0;min-height:24px}
 .date-lbl{display:inline-block;margin-top:2px;font-family:var(--sans);font-size:12px;color:var(--muted)}
-.mitem-right,.g-item-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.mitem-amt,.g-item-amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
+.mitem-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.mitem-amt-col{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.mitem-amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
 .del-btn{background:none;border:none;color:var(--faint);font-size:24px;cursor:pointer;padding:0 6px;min-height:44px;line-height:1;-webkit-tap-highlight-color:transparent;transition:color .15s}
 .del-btn:hover{color:var(--maroon)}
 .mtotal{display:flex;align-items:center;justify-content:space-between;padding:14px 0 6px;border-top:1px solid var(--line);margin-top:2px}
 .mtotal-lbl{font-family:var(--sans);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 .mtotal-val{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
-
-/* ── Vendor split ── */
-.vendor-row{display:flex;gap:12px;padding:12px 0 4px}
-.vendor-item{flex:1;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--card-2)}
-.vendor-item .v-lbl{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
-.vendor-item .v-val{font-family:var(--mono);font-size:17px;margin-top:3px;font-variant-numeric:tabular-nums}
 
 /* ── Base override ── */
 .base-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end}
@@ -474,7 +480,6 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--mute
 .cc-pay-fields .misc-amt{width:auto;flex:1;min-width:90px}
 .cc-pay-confirm{width:100%;min-height:50px;font-size:15px}
 /* Method chip */
-.paid-grp{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .pay-chip{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap;display:inline-flex;align-items:center}
 .pm-dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-right:5px;vertical-align:middle}
 /* Payments tab */
@@ -548,13 +553,7 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--mute
 :root[data-style="splitwise"] .hd-sub{margin-left:40px}
 
 /* Checkmark pill instead of an outline/filled pair */
-:root[data-style="splitwise"] .pbtn.due{border:1.5px solid var(--maroon)}
-:root[data-style="splitwise"] .pbtn.due:hover{color:var(--on-maroon)}
-:root[data-style="splitwise"] .pbtn.due:active,
-:root[data-style="splitwise"] .pbtn.paid:active,
 :root[data-style="splitwise"] .pbtn.act:active{transform:scale(.96)}
-:root[data-style="splitwise"] .pbtn.paid{border:none;color:var(--on-accent);display:inline-flex;align-items:center;gap:5px}
-:root[data-style="splitwise"] .pbtn.paid::before{content:"✓";font-size:12px;font-weight:900}
 :root[data-style="splitwise"] .pbtn.act{border:none;color:var(--on-accent)}
 
 /* Flat rounded chips instead of mono day-grid squares */
@@ -662,13 +661,11 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--mute
 :root[data-style="cloud-dancer"] .hd-sub{margin-top:2px}
 
 /* Washi-tape "paid" stamp instead of a plain pill */
-:root[data-style="cloud-dancer"] .pbtn.paid,
 :root[data-style="cloud-dancer"] .pbtn.act{
   border:none; color:var(--on-accent); border-radius:2px;
   background:repeating-linear-gradient(115deg, var(--green), var(--green) 6px, color-mix(in srgb, var(--green) 85%, white) 6px, color-mix(in srgb, var(--green) 85%, white) 7px);
   box-shadow:0 2px 5px rgba(0,0,0,.22);
 }
-:root[data-style="cloud-dancer"] .pbtn.paid{transform:rotate(-1.5deg)}
 
 /* Punch-card attendance holes instead of a plain day-grid */
 :root[data-style="cloud-dancer"] .chip{border-radius:50%;border:1.5px solid var(--faint);background:var(--card-2);box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}

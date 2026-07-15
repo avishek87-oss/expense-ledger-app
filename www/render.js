@@ -1,11 +1,9 @@
 'use strict';
 // ── HTML builders ──────────────────────────────────────────────────────────
-function paidBtn(key, paid, amount) {
-  if (paid) {
-    const method = (getMD().payMethod || {})[key];
-    return `<div class="paid-grp"><button class="pbtn paid" onclick="togglePaid('${key}')">Paid</button>${pmChip(method)}</div>`;
-  }
-  return `<button class="pbtn due" onclick="startPayment('fixed','${key}',${amount})">Mark paid</button>`;
+function paidChip(key, paid) {
+  if (!paid) return '';
+  const method = (getMD().payMethod || {})[key];
+  return pmChip(method);
 }
 // editSpec = { baseKey, baseDefault, nameEditable, amountEditable } drives the pencil
 // button's edit sheet; pass null to skip the pencil for a row (rare — see call sites).
@@ -17,7 +15,7 @@ function ledgerRow(key, label, sub, amount, paid, controls='', editSpec=null) {
     ? `<button class="base-edit-btn" title="Edit" onclick="openFixedItemEdit('${key}','${esc(label)}','${es.baseKey||key}',${es.baseDefault ?? amount},${!!es.nameEditable},${amountEditable})">✎</button>`
     : '';
   return `
-<div class="lrow">
+<div class="lrow" data-key="${key}" data-amount="${amount}" data-paid="${!!paid}">
   <div class="lrow-main">
     <div class="lrow-left">
       <div class="lrow-label">${esc(label)}</div>
@@ -25,8 +23,10 @@ function ledgerRow(key, label, sub, amount, paid, controls='', editSpec=null) {
       ${dateLabel(pd)}
     </div>
     <div class="lrow-right">
-      <span class="lrow-amt">₹${inr(amount)}</span>
-      ${paidBtn(key, paid, amount)}
+      <div class="lrow-amt-col">
+        <span class="lrow-amt">₹${inr(amount)}</span>
+        ${paidChip(key, paid)}
+      </div>
       ${pencil}
     </div>
   </div>
@@ -94,16 +94,16 @@ function miscItemList(cat, items) {
   let html = '';
   if ((items||[]).length) {
     html += byDateDesc(items).map(({it,i})=>`
-    <div class="mitem" data-cat="${cat}" data-idx="${i}">
+    <div class="mitem" data-cat="${cat}" data-idx="${i}" data-paid="${!!it.paid}">
       <div class="mitem-left">
         <div class="mitem-txt">${esc(it.text)}</div>
         ${dateLabel(it.date)}
       </div>
       <div class="mitem-right">
-        <span class="mitem-amt">₹${inr(it.amount)}</span>
-        ${it.paid
-          ? `<div class="paid-grp"><button class="pbtn sm paid" onclick="toggleMiscPaid('${cat}',${i})">Paid</button>${pmChip(it.payMethod)}</div>`
-          : `<button class="pbtn sm due" onclick="startPayment('misc','${cat}',${i})">Mark paid</button>`}
+        <div class="mitem-amt-col">
+          <span class="mitem-amt">₹${inr(it.amount)}</span>
+          ${it.paid ? pmChip(it.payMethod) : ''}
+        </div>
         <button class="base-edit-btn" title="Edit" onclick="openMiscEdit('${cat}',${i})">✎</button>
       </div>
     </div>`).join('');
@@ -116,29 +116,35 @@ function miscItemList(cat, items) {
   </div>`;
   return html;
 }
-function sectionCard(id, title, amount, paid, bodyHtml, opts) {
-  opts = opts || {};
-  const pending = Math.max(0, amount - paid);
-  const settled = amount > 0.5 && pending <= 0.5;
-  const open = isOpen(id, pending);
+// ── Ledger tab: category button grid + drill-down detail page ─────────────
+function ledgerCategoryButtonGrid(defs) {
+  // defs: [[id, title, amount, paid], ...] in display order
+  return `<div class="ledger-grid">` + defs.map(([id, title, amount, paid]) => {
+    const pending = Math.max(0, amount - paid);
+    const settled = amount > 0.5 && pending <= 0.5;
+    let sub;
+    if (amount <= 0.5)  sub = `<span class="tag-none">Nothing due</span>`;
+    else if (settled)   sub = `<span class="tag-ok">Settled</span>`;
+    else                sub = `<span class="tag-due">₹${inr(pending)} due</span>`;
+    return `<button class="ledger-cat-btn" onclick="openLedgerCategory('${id}')">
+      <span class="lcb-title">${esc(title)}</span>
+      <span class="lcb-sub">${sub}</span>
+      <span class="lcb-amt">₹${inr(amount)}</span>
+    </button>`;
+  }).join('') + `</div>`;
+}
+function ledgerCategoryDetailHtml(id, title, amount, paid, bodyHtml) {
   const pct = amount > 0 ? Math.min(100, Math.round(paid/amount*100)) : 0;
-  let sub;
-  if (amount <= 0.5)  sub = `<span class="tag-none">Nothing due</span>`;
-  else if (settled)   sub = `<span class="tag-ok">Settled</span>`;
-  else                sub = `<span class="tag-due">₹${inr(pending)} due</span>`;
-  return `<section class="card${open?' open':''}${settled?' settled':''}${opts.span?' span2':''}" data-sec="${id}" aria-expanded="${open?'true':'false'}">
-    <button class="card-hd" onclick="toggleCollapse('${id}')" aria-controls="body-${id}">
-      <span class="chev" aria-hidden="true">›</span>
-      <span class="hd-main">
-        <span class="hd-title">${esc(title)}</span>
-        <span class="hd-sub">${sub}</span>
-      </span>
+  return `<div class="ledger-detail" data-sec="${id}">
+    <button class="ledger-back-btn" onclick="closeLedgerDrilldown()" aria-label="Back">‹ Back</button>
+    <div class="ledger-detail-hd">
+      <span class="hd-title">${esc(title)}</span>
       <span class="hd-amt">₹${inr(amount)}</span>
-    </button>
+    </div>
     <div class="hd-bar"><i style="width:${pct}%"></i></div>
     ${budgetNote(id, amount)}
-    <div class="card-body-wrap"><div class="card-body" id="body-${id}">${bodyHtml}</div></div>
-  </section>`;
+    <div class="ledger-detail-body">${bodyHtml}</div>
+  </div>`;
 }
 // Over-budget indicator for a Ledger section, shown only when a cap is set for it.
 function budgetNote(cat, spent) {
@@ -266,17 +272,12 @@ function render() {
   const fixedPaid = (md.paid.sukanya?sukanyaAmt:0)+(md.paid.carEmi?carEmi:0)+(md.paid.rent?rent:0)+customSectionPaid(currentMonth,'fixed');
 
   // --- Household ---
-  const groceries   = md.groceries||[];
-  const groceryTot  = groceries.reduce((s,g)=>s+Number(g.amount||0),0);
-  const groceryPaid = groceries.reduce((s,g)=>g.paid?s+Number(g.amount||0):s,0);
-  const bySagar     = groceries.filter(g=>g.vendor==='Sagar').reduce((s,g)=>s+Number(g.amount||0),0);
-  const byAjit      = groceries.filter(g=>g.vendor==='Ajit').reduce((s,g)=>s+Number(g.amount||0),0);
   const hhGrocTot   = (md.householdGroceries||[]).reduce((s,it)=>s+Number(it.amount||0),0);
   const hhGrocPaid  = (md.householdGroceries||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
   const hhMiscTot   = (md.householdMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0);
   const hhMiscPaid  = (md.householdMisc||[]).reduce((s,it)=>it.paid?s+Number(it.amount||0):s,0);
-  const hhTot       = groceryTot + hhGrocTot + hhMiscTot + customSectionTotal(currentMonth,'household');
-  const hhPaid      = groceryPaid + hhGrocPaid + hhMiscPaid + customSectionPaid(currentMonth,'household');
+  const hhTot       = hhGrocTot + hhMiscTot + customSectionTotal(currentMonth,'household');
+  const hhPaid      = hhGrocPaid + hhMiscPaid + customSectionPaid(currentMonth,'household');
 
   // --- Neha / Avishek ---
   const nehaTot  = (md.nehaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0) + customSectionTotal(currentMonth,'neha');
@@ -398,25 +399,7 @@ function render() {
   fixedBody += customItemsSectionHtml(currentMonth, 'fixed', md, dim);
 
   // Household
-  let hhBody = `<div class="sublbl">Veges / Fruits — Sagar &amp; Ajit</div>
-    <div class="vendor-row">
-      <div class="vendor-item"><div class="v-lbl">Sagar</div><div class="v-val">₹${inr(bySagar)}</div></div>
-      <div class="vendor-item"><div class="v-lbl">Ajit</div><div class="v-val">₹${inr(byAjit)}</div></div>
-    </div>`;
-  if (!groceries.length) hhBody += `<div class="cc-empty">Nothing yet — add one with the + button</div>`;
-  byDateDesc(groceries).forEach(({it:g,i})=>{
-    hhBody += `<div class="g-item" data-cat="groceries" data-idx="${i}">
-      <div class="g-item-left"><div class="g-item-txt">${esc(g.vendor)} · ${esc(g.category)}</div>${dateLabel(g.date)}</div>
-      <div class="g-item-right">
-        <span class="g-item-amt">₹${inr(g.amount)}</span>
-        ${g.paid
-          ? `<div class="paid-grp"><button class="pbtn sm paid" onclick="toggleGroceryPaid(${i})">Paid</button>${pmChip(g.payMethod)}</div>`
-          : `<button class="pbtn sm due" onclick="startPayment('grocery',${i})">Mark paid</button>`}
-        <button class="base-edit-btn" title="Edit" onclick="openGroceryEdit(${i})">✎</button>
-      </div>
-    </div>`;
-  });
-  hhBody += `<div class="sublbl">Household Groceries</div>${miscItemList('householdGroceries', md.householdGroceries)}`;
+  let hhBody = `<div class="sublbl">Household Groceries</div>${miscItemList('householdGroceries', md.householdGroceries)}`;
   hhBody += `<div class="sublbl">Household Miscellaneous</div>${miscItemList('householdMisc', md.householdMisc)}`;
   hhBody += customItemsSectionHtml(currentMonth, 'household', md, dim);
 
@@ -426,19 +409,23 @@ function render() {
 
   // ── Assemble ────────────────────────────────────────────────────────
   // Display order: Household, Neha, Aavia, Avishek, Maids, Fixed.
-  const secDefs = [['household',hhTot-hhPaid],['neha',nehaTot-nehaPaid],['aavia',aaviaTot-aaviaPaid],
-                   ['avishek',avishTot-avishPd],['maids',maidsSecTot-maidsPaid],['fixed',fixedTot-fixedPaid]];
-  const anyOpen = secDefs.some(([id,pending]) => isOpen(id, pending));
-  let html = `<div class="toolbar">
-    <button class="tbtn" onclick="setAllCollapsed(${anyOpen})">${anyOpen?'Collapse all':'Expand all'}</button>
-  </div><div id="sections">`;
-  html += sectionCard('household','Household', hhTot,       hhPaid,    hhBody, { span:true });
-  html += sectionCard('neha',     'Neha',      nehaTot,     nehaPaid,  nehaBody);
-  html += sectionCard('aavia',    'Aavia',     aaviaTot,    aaviaPaid, aaviaBody);
-  html += sectionCard('avishek',  'Avishek',   avishTot,    avishPd,   avishBody);
-  html += sectionCard('maids',    'Maids',     maidsSecTot, maidsPaid, maidsBody);
-  html += sectionCard('fixed',    'Fixed',     fixedTot,    fixedPaid, fixedBody);
-  html += `</div>`;
+  const secDefs = [
+    ['household', 'Household', hhTot,       hhPaid,    hhBody],
+    ['neha',      'Neha',      nehaTot,     nehaPaid,  nehaBody],
+    ['aavia',     'Aavia',     aaviaTot,    aaviaPaid, aaviaBody],
+    ['avishek',   'Avishek',   avishTot,    avishPd,   avishBody],
+    ['maids',     'Maids',     maidsSecTot, maidsPaid, maidsBody],
+    ['fixed',     'Fixed',     fixedTot,    fixedPaid, fixedBody],
+  ];
+  let html;
+  const found = ledgerDrilldown && secDefs.find(([id]) => id === ledgerDrilldown);
+  if (found) {
+    const [id, title, amount, paid, bodyHtml] = found;
+    html = ledgerCategoryDetailHtml(id, title, amount, paid, bodyHtml);
+  } else {
+    ledgerDrilldown = null; // stale/invalid id guard
+    html = ledgerCategoryButtonGrid(secDefs.map(([id, title, amount, paid]) => [id, title, amount, paid]));
+  }
 
   document.getElementById('app-body').innerHTML = html;
   window.scrollTo(0, scrollY);
@@ -472,7 +459,6 @@ function collectPaidItems(mk) {
   const pushItems = (arr, labelFn) => (arr||[]).filter(it=>it.paid).forEach(it =>
     out.push({ label:labelFn(it), amount:Number(it.amount||0), method:it.payMethod||null, date:it.date||'' }));
   pushItems(md.aaviaMisc,          it=>'Aavia — '+it.text);
-  pushItems(md.groceries,          g =>g.vendor+' ('+g.category+')');
   pushItems(md.householdGroceries, it=>'HH Groceries — '+it.text);
   pushItems(md.householdMisc,      it=>'HH Misc — '+it.text);
   pushItems(md.nehaMisc,           it=>'Neha — '+it.text);

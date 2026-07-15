@@ -123,18 +123,13 @@
 <div id="qa-overlay" class="pay-overlay hidden" onclick="closeQuickAdd()">
   <div class="pay-sheet" onclick="event.stopPropagation()">
     <div class="pay-sheet-title">Quick add</div>
-    <select id="qa-bucket" class="sel" style="width:100%;margin-bottom:10px" onchange="qaBucketChanged()">
-      <option value="groceries">Groceries</option>
+    <select id="qa-bucket" class="sel" style="width:100%;margin-bottom:10px">
       <option value="householdGroceries">Household Groceries</option>
       <option value="householdMisc">Household Misc</option>
       <option value="nehaMisc">Neha Misc</option>
       <option value="avishekMisc">Avishek Misc</option>
       <option value="aaviaMisc">Aavia Misc</option>
     </select>
-    <div id="qa-grocery-fields" style="display:none;gap:8px;margin-bottom:10px">
-      <select id="qa-vendor" class="sel" style="flex:1"><option>Sagar</option><option>Ajit</option></select>
-      <select id="qa-cat" class="sel" style="flex:1"><option value="veges">veges</option><option value="fruits">fruits</option><option value="other">other</option></select>
-    </div>
     <input id="qa-text" class="misc-txt" style="width:100%;margin-bottom:10px" type="text" placeholder="what was it?">
     <div class="cc-pay-fields">
       <input id="qa-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
@@ -198,7 +193,6 @@
     <button class="sf-chip" id="sf-paid" onclick="toggleSearchFilter('paid','paid')">Paid</button>
     <select id="sf-cat" class="sel sf-select" onchange="setSearchFilter('cat',this.value)">
       <option value="">Category</option>
-      <option value="groceries">Groceries</option>
       <option value="householdGroceries">HH Groceries</option>
       <option value="householdMisc">HH Misc</option>
       <option value="aaviaMisc">Aavia</option>
@@ -244,10 +238,6 @@
   <div class="pay-sheet" onclick="event.stopPropagation()">
     <div class="pay-sheet-title" id="ie-title">Edit item</div>
     <input id="ie-name" class="misc-txt" style="width:100%;margin-bottom:10px" type="text" placeholder="item name">
-    <div id="ie-grocery-row" style="display:none;gap:8px;margin-bottom:10px">
-      <select id="ie-vendor" class="sel" style="flex:1"><option>Sagar</option><option>Ajit</option></select>
-      <select id="ie-cat" class="sel" style="flex:1"><option value="veges">veges</option><option value="fruits">fruits</option><option value="other">other</option></select>
-    </div>
     <div class="cc-pay-fields">
       <input id="ie-amount" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
       <input id="ie-date" class="cc-date" type="date">
@@ -314,7 +304,6 @@
       <div>
         <label style="display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted)">Category</label>
         <select id="cc-cyc-edit-cat" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--ink);font-size:14px;box-sizing:border-box">
-          <option value="groceries">Groceries</option>
           <option value="householdGroceries">Household Groceries</option>
           <option value="householdMisc">Household Misc</option>
           <option value="aaviaMisc">Aavia Misc</option>
