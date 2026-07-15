@@ -205,6 +205,15 @@ async function pullFromSheets() {
   }
 }
 function setSyncState(s) {
+  // Any confirmed-good sync — whether a successful push OR a successful pull —
+  // means data is safe on the server again, so the "couldn't save" banner must
+  // clear itself. (A pull that succeeds after failed pushes used to leave the
+  // banner stuck on screen until the user manually tapped ✕.)
+  if (s === 'ok') {
+    consecutivePushFailures = 0;
+    syncFailBannerDismissed = false;
+    updateSyncFailBanner();
+  }
   const dot = document.getElementById('sync-dot');
   const lbl = document.getElementById('sync-lbl');
   if (!dot) return;

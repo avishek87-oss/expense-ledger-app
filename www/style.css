@@ -38,7 +38,11 @@ body.no-month-nav{--toolbar-top:var(--header-sticky-height);}
   --card-shadow:rgba(0,0,0,.45);
   --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4);
 }
-html{-webkit-text-size-adjust:100%}
+/* overflow-x:clip (not hidden) prevents any stray horizontal spill from
+   creating a document scrollbar that shifts the fixed bottom nav, without
+   turning the root into a scroll container (which would break the sticky #hdr). */
+html{-webkit-text-size-adjust:100%;overflow-x:clip}
+body{overflow-x:clip}
 body{font-family:var(--serif);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
 input,select,button{font-family:inherit;-webkit-appearance:none}
 /* 16px minimum on all text inputs/selects prevents Android auto-zoom on focus */
@@ -112,7 +116,14 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 .hero-lbl{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:rgba(247,244,236,.6);font-weight:600}
 .hero-num{font-family:var(--mono);font-size:36px;font-weight:600;letter-spacing:-0.02em;margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
 .hero-num.g{color:#a9c6a9}
-.hero-stats{display:flex;gap:26px;padding-bottom:3px}
+/* 5 payment methods can be wider than the hero on a phone. Keep the row inside
+   the hero (scroll it horizontally rather than letting it spill) so it never
+   pushes document-level horizontal overflow — which in the Cloud Dancer theme
+   (overflow:visible hero) spilled "N·Bank" out of the card and dragged a
+   horizontal scrollbar across the fixed bottom nav. min-width:0 lets a flex
+   item actually honor overflow-x. */
+.hero-stats{display:flex;gap:26px;padding-bottom:3px;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.hero-stats::-webkit-scrollbar{display:none}
 .hstat .k{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(247,244,236,.55);font-weight:600}
 .hstat .v{font-family:var(--mono);font-size:16px;margin-top:3px;color:var(--hero-fg);font-variant-numeric:tabular-nums}
 .hstat .v.g{color:#a9c6a9}
@@ -145,11 +156,13 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 /* ── Card ── */
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
 .card-hd{width:100%;display:flex;align-items:center;gap:12px;padding:18px 18px;background:none;border:none;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent;overflow:hidden;border-radius:var(--radius)}
-/* Keep the open section's name + remaining amount in view while scrolling through its rows */
-.card.open .card-hd{
-  position:sticky; top:calc(var(--toolbar-top) + var(--section-toolbar-height));
-  z-index:10; background:var(--card); box-shadow:0 3px 8px rgba(0,0,0,.08);
-}
+/* NOTE: this header was previously pinned with position:sticky, but with the
+   app's tall fixed chrome the sticky top offset (~182px) displaced the pinned
+   header far below its natural slot — it landed on top of the section's own
+   intro rows (Veges/Fruits vendor totals, budget note) and clipped the first
+   item. It only looked right in Cloud Dancer, where the card's rotate()
+   transform silently disables sticky. Header now scrolls with its section in
+   every theme, which is consistent and artifact-free. */
 .card-hd.static{cursor:default}
 .chev{font-size:22px;color:var(--faint);line-height:1;flex-shrink:0;transition:transform .25s ease;width:14px;text-align:center}
 .card.open .chev{transform:rotate(90deg);color:var(--muted)}
@@ -217,6 +230,7 @@ main{max-width:1140px;margin:0 auto;padding:16px 16px calc(96px + var(--bottom-n
 /* ── Checkbox ── */
 .chk-row{display:flex;align-items:center;gap:10px;font-family:var(--sans);font-size:14px;color:var(--ink-soft);cursor:pointer;min-height:44px}
 .chk-row input{width:22px;height:22px;cursor:pointer;accent-color:var(--accent);flex-shrink:0}
+.ie-change-method{color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline;padding:2px 2px}
 
 /* ── Misc list ── */
 .misc-txt{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:16px;background:var(--input-bg);color:var(--ink);flex:1;min-width:120px;min-height:44px}

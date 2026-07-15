@@ -234,8 +234,7 @@ function confirmPay(method) {
     // everything (date/name/amount/paid) together when the edit sheet is saved.
     if (pendingItemEdit) {
       pendingItemEdit.chosenMethod = method;
-      const lbl = document.getElementById('ie-paid-method');
-      if (lbl) lbl.textContent = 'via ' + methodLabel;
+      ieSetPaidMethodLabel(method);
     }
   } else if (type === 'batch') {
     const [keys] = args;
@@ -326,7 +325,7 @@ function openGroceryEdit(i) {
   amtInput.value = Math.round(it.amount); amtInput.disabled = false;
   const chk = document.getElementById('ie-paid');
   chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
-  document.getElementById('ie-paid-method').textContent = '';
+  ieSetPaidMethodLabel(it.paid ? it.payMethod : null);
   document.getElementById('ie-delete-btn').textContent = 'Delete item';
   openItemEditOverlay();
 }
@@ -344,7 +343,7 @@ function openMiscEdit(cat, i) {
   amtInput.value = Math.round(it.amount); amtInput.disabled = false;
   const chk = document.getElementById('ie-paid');
   chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
-  document.getElementById('ie-paid-method').textContent = '';
+  ieSetPaidMethodLabel(it.paid ? it.payMethod : null);
   document.getElementById('ie-delete-btn').textContent = 'Delete item';
   openItemEditOverlay();
 }
@@ -365,15 +364,38 @@ function openFixedItemEdit(key, label, baseKey, baseDefault, nameEditable, amoun
   const paid = !!md.paid[key];
   const chk = document.getElementById('ie-paid');
   chk.checked = paid; chk.dataset.wasPaid = paid ? '1' : '0';
-  document.getElementById('ie-paid-method').textContent = '';
+  ieSetPaidMethodLabel(paid ? (md.payMethod||{})[key] : null);
   document.getElementById('ie-delete-btn').textContent = 'Stop tracking ' + label;
   openItemEditOverlay();
 }
 function iePaidChanged() {
   const chk = document.getElementById('ie-paid');
-  if (chk.checked && chk.dataset.wasPaid !== '1' && pendingItemEdit && !pendingItemEdit.chosenMethod) {
-    startPayment('itemEdit', pendingItemEdit.kind === 'fixed' ? pendingItemEdit.key : undefined);
+  if (chk.checked) {
+    if (chk.dataset.wasPaid !== '1' && pendingItemEdit && !pendingItemEdit.chosenMethod) {
+      startPayment('itemEdit', pendingItemEdit.kind === 'fixed' ? pendingItemEdit.key : undefined);
+    }
+  } else {
+    // Unpaid again — forget any method and clear the hint.
+    if (pendingItemEdit) pendingItemEdit.chosenMethod = null;
+    ieSetPaidMethodLabel(null);
   }
+}
+// Shows the "via X · Change" hint beside the Paid checkbox in the edit sheet.
+// Tapping Change reopens the pay-via picker, which is the only way to swap the
+// method on an item that was already paid (the picker otherwise only appears
+// the first time Paid is checked).
+function ieSetPaidMethodLabel(methodKey) {
+  const lbl = document.getElementById('ie-paid-method');
+  if (!lbl) return;
+  if (!methodKey) { lbl.textContent = ''; return; }
+  const m = PAY_METHODS.find(x => x.key === methodKey);
+  const short = m ? (m.short || m.label) : methodKey;
+  lbl.innerHTML = `via ${short} · <a class="ie-change-method" onclick="ieChangeMethod(event)">Change</a>`;
+}
+function ieChangeMethod(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (!pendingItemEdit) return;
+  startPayment('itemEdit', pendingItemEdit.kind === 'fixed' ? pendingItemEdit.key : undefined);
 }
 // Applies a full field patch to an array item, re-filing it into a different
 // month's array if the edited date crosses a month boundary (same mechanics as
