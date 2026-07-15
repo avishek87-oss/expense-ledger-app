@@ -48,7 +48,7 @@ function getOutstandingItems() {
 
       (md.aaviaMisc||[]).forEach((it,i) => { if (!it.paid) due.push({ label:'Aavia — '+it.text, sub:it.date||'', amount:it.amount, toggleType:'item', toggleKey:'aaviaMisc', toggleIdx:i }); });
 
-      chk('Sukanya Samriddhi', SUKANYA, 'sukanya', 'flat');
+      chk('Sukanya Samriddhi', sukanyaFee(mk), 'sukanya', 'flat');
       chk('Car EMI', carEmiFee(mk), 'carEmi', 'Aug 2022–Jul 2027');
       const rentBase = effectiveBase(mk, 'rent', rentFee(mk));
       chk('Rent', rentBase, 'rent', `₹${inr(rentBase)}/mo`);
@@ -93,8 +93,7 @@ function startBatchPay() {
   const anyNoCC = keys.some(k => { const [,itype,ikey] = k.split('|'); return itype==='fixed' && NO_CC_KEYS.has(ikey); });
   const methods = anyNoCC ? PAY_METHODS.filter(m => m.key !== 'axisCC' && m.key !== 'scapiaCC') : PAY_METHODS;
   pendingPay = { type:'batch', args:[keys] };
-  document.getElementById('pay-methods').innerHTML =
-    methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
+  document.getElementById('pay-methods').innerHTML = payMethodButtonsHtml(methods);
   document.getElementById('pay-overlay').classList.remove('hidden');
 }
 
@@ -153,13 +152,20 @@ function nehaBalanceEditControl(currentBalance) {
 }
 
 // ── Payment picker ─────────────────────────────────────────────────────────
+// Stable per-method identity dot (see --pm-* tokens in style.css) — used on
+// "via" chips and on the picker buttons themselves so the same color always
+// means the same payment source everywhere in the app.
+function pmDot(key) { return `<span class="pm-dot" style="background:var(--pm-${key})"></span>`; }
 function pmChip(method) {
   const pm = PAY_METHODS.find(m => m.key === method);
-  return pm ? `<span class="pay-chip">via ${pm.short}</span>` : '';
+  return pm ? `<span class="pay-chip">${pmDot(pm.key)}via ${pm.short}</span>` : '';
+}
+function payMethodButtonsHtml(methods) {
+  return methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${pmDot(m.key)}${m.label}</button>`).join('');
 }
 function startPayment(type, ...args) {
   // Determine the item key for restriction lookups (fixed items only)
-  const key = (type === 'fixed') ? args[0] : (type === 'outFixed') ? args[1] : null;
+  const key = (type === 'fixed' || type === 'itemEdit') ? args[0] : (type === 'outFixed') ? args[1] : null;
 
   // Auto-confirm items with exactly one valid method — no picker needed
   if (key && FIXED_METHOD[key]) {
@@ -169,13 +175,12 @@ function startPayment(type, ...args) {
   }
 
   // Filter methods: no CC for maids/classes
-  const methods = (type === 'fixed' || type === 'outFixed') && key && NO_CC_KEYS.has(key)
+  const methods = (type === 'fixed' || type === 'outFixed' || type === 'itemEdit') && key && NO_CC_KEYS.has(key)
     ? PAY_METHODS.filter(m => m.key !== 'axisCC' && m.key !== 'scapiaCC')
     : PAY_METHODS;
 
   pendingPay = { type, args };
-  document.getElementById('pay-methods').innerHTML =
-    methods.map(m => `<button class="pmth-btn" onclick="confirmPay('${m.key}')">${m.label}</button>`).join('');
+  document.getElementById('pay-methods').innerHTML = payMethodButtonsHtml(methods);
   const overlay = document.getElementById('pay-overlay');
   overlay.classList.remove('hidden');
   attachOverlayBackHandler('pay-overlay', cancelPay);
@@ -196,14 +201,12 @@ function confirmPay(method) {
       `paid ₹${amt} ${fixedLabel(key)} via ${methodLabel}`);
   } else if (type === 'misc') {
     const [cat, idx] = args;
-    captureMiscDraft(cat);
     const md = getMD();
     const item = (md[cat]||[])[idx];
     updateMonth({ [cat]:(md[cat]||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
       item && `paid ₹${item.amount} ${cat} (${item.text}) via ${methodLabel}`);
   } else if (type === 'grocery') {
     const [idx] = args;
-    captureGroceryDraft();
     const md = getMD();
     const item = (md.groceries||[])[idx];
     updateMonth({ groceries:(md.groceries||[]).map((x,i)=>i===idx?{...x,paid:true,payMethod:method}:x) },
@@ -219,6 +222,21 @@ function confirmPay(method) {
     const item = (md[cat]||[])[idx];
     updateMonthFor(mk, { [cat]:(md[cat]||[]).map((it,i)=>i===idx?{...it,paid:true,payMethod:method}:it) },
       item && `paid ₹${item.amount} ${cat} (${item.text||item.vendor}) via ${methodLabel} (${monthLabel(mk)})`);
+  } else if (type === 'quickAdd') {
+    const [mk, bucket, entry] = args;
+    const tmd = getMDFor(mk);
+    const paidEntry = { ...entry, paid:true, payMethod:method };
+    updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), paidEntry] },
+      `added ₹${entry.amount} ${bucket} (${entry.vendor||entry.text}) via ${methodLabel}`);
+    closeQuickAdd();
+  } else if (type === 'itemEdit') {
+    // Don't commit yet — just remember the chosen method; saveItemEdit() commits
+    // everything (date/name/amount/paid) together when the edit sheet is saved.
+    if (pendingItemEdit) {
+      pendingItemEdit.chosenMethod = method;
+      const lbl = document.getElementById('ie-paid-method');
+      if (lbl) lbl.textContent = 'via ' + methodLabel;
+    }
   } else if (type === 'batch') {
     const [keys] = args;
     const byMonth = {};
@@ -254,8 +272,186 @@ function confirmPay(method) {
   }
 }
 function cancelPay() {
+  const wasType = pendingPay && pendingPay.type;
   pendingPay = null;
   document.getElementById('pay-overlay').classList.add('hidden');
+  // Cancelling the picker mid-edit shouldn't leave "Paid" checked with no method chosen.
+  if (wasType === 'itemEdit' && pendingItemEdit && !pendingItemEdit.chosenMethod) {
+    const chk = document.getElementById('ie-paid');
+    if (chk && chk.dataset.wasPaid !== '1') chk.checked = false;
+  }
+}
+
+// ── Unified item edit (pencil) ──────────────────────────────────────────────
+// One edit sheet (date / name / amount / paid) for grocery items, misc items
+// (all 6 buckets), and Fixed-section rows (built-in + custom). Checking "Paid"
+// stacks the existing pay-via picker (#pay-overlay) on top without closing this
+// sheet — confirmPay's 'itemEdit' branch just remembers the chosen method;
+// saveItemEdit() commits everything together.
+let pendingItemEdit = null;
+function openItemEditOverlay() {
+  document.getElementById('item-edit-overlay').classList.remove('hidden');
+  attachOverlayBackHandler('item-edit-overlay', cancelItemEdit);
+}
+function cancelItemEdit() {
+  pendingItemEdit = null;
+  document.getElementById('item-edit-overlay').classList.add('hidden');
+}
+// Delete/discontinue lives in the edit sheet instead of a permanent 🗑/× on every
+// row. Grocery/misc deletion stays undo-able with no extra confirm (same as the
+// existing swipe-to-delete gesture); discontinuing a fixed item already confirms.
+function deleteItemFromEdit() {
+  const pe = pendingItemEdit;
+  if (!pe) return;
+  if (pe.kind === 'grocery') deleteGrocery(pe.idx);
+  else if (pe.kind === 'misc') deleteMiscItem(pe.cat, pe.idx);
+  else if (pe.kind === 'fixed') discontinueFixedItem(pe.key, pe.label);
+  cancelItemEdit();
+}
+function ieShowGroceryFields(isGrocery) {
+  document.getElementById('ie-name').style.display = isGrocery ? 'none' : 'block';
+  document.getElementById('ie-grocery-row').style.display = isGrocery ? 'flex' : 'none';
+}
+function openGroceryEdit(i) {
+  const md = getMD();
+  const it = (md.groceries||[])[i];
+  if (!it) return;
+  pendingItemEdit = { kind:'grocery', idx:i, chosenMethod:null };
+  document.getElementById('ie-title').textContent = 'Edit grocery item';
+  ieShowGroceryFields(true);
+  document.getElementById('ie-vendor').value = it.vendor;
+  document.getElementById('ie-cat').value = it.category;
+  document.getElementById('ie-date').value = it.date || '';
+  const amtInput = document.getElementById('ie-amount');
+  amtInput.value = Math.round(it.amount); amtInput.disabled = false;
+  const chk = document.getElementById('ie-paid');
+  chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
+  document.getElementById('ie-paid-method').textContent = '';
+  document.getElementById('ie-delete-btn').textContent = 'Delete item';
+  openItemEditOverlay();
+}
+function openMiscEdit(cat, i) {
+  const md = getMD();
+  const it = (md[cat]||[])[i];
+  if (!it) return;
+  pendingItemEdit = { kind:'misc', cat, idx:i, chosenMethod:null };
+  document.getElementById('ie-title').textContent = 'Edit item';
+  ieShowGroceryFields(false);
+  const nameInput = document.getElementById('ie-name');
+  nameInput.value = it.text || ''; nameInput.disabled = false;
+  document.getElementById('ie-date').value = it.date || '';
+  const amtInput = document.getElementById('ie-amount');
+  amtInput.value = Math.round(it.amount); amtInput.disabled = false;
+  const chk = document.getElementById('ie-paid');
+  chk.checked = !!it.paid; chk.dataset.wasPaid = it.paid ? '1' : '0';
+  document.getElementById('ie-paid-method').textContent = '';
+  document.getElementById('ie-delete-btn').textContent = 'Delete item';
+  openItemEditOverlay();
+}
+// amountEditable is false for the handful of fixed items whose "amount" isn't a
+// single overridable base (Japa Maid's payout is day-prorated; School Fees has
+// two base values of its own, edited separately) — those still get date+paid.
+function openFixedItemEdit(key, label, baseKey, baseDefault, nameEditable, amountEditable) {
+  const md = getMD();
+  const amount = amountEditable ? effectiveBase(currentMonth, baseKey, baseDefault) : baseDefault;
+  pendingItemEdit = { kind:'fixed', key, baseKey, label, nameEditable, amountEditable, chosenMethod:null };
+  document.getElementById('ie-title').textContent = 'Edit ' + label;
+  ieShowGroceryFields(false);
+  const nameInput = document.getElementById('ie-name');
+  nameInput.value = label; nameInput.disabled = !nameEditable;
+  document.getElementById('ie-date').value = (md.payDate||{})[key] || '';
+  const amtInput = document.getElementById('ie-amount');
+  amtInput.value = Math.round(amount); amtInput.disabled = !amountEditable;
+  const paid = !!md.paid[key];
+  const chk = document.getElementById('ie-paid');
+  chk.checked = paid; chk.dataset.wasPaid = paid ? '1' : '0';
+  document.getElementById('ie-paid-method').textContent = '';
+  document.getElementById('ie-delete-btn').textContent = 'Stop tracking ' + label;
+  openItemEditOverlay();
+}
+function iePaidChanged() {
+  const chk = document.getElementById('ie-paid');
+  if (chk.checked && chk.dataset.wasPaid !== '1' && pendingItemEdit && !pendingItemEdit.chosenMethod) {
+    startPayment('itemEdit', pendingItemEdit.kind === 'fixed' ? pendingItemEdit.key : undefined);
+  }
+}
+// Applies a full field patch to an array item, re-filing it into a different
+// month's array if the edited date crosses a month boundary (same mechanics as
+// moveDatedItem's cross-month branch, extended to carry the other field edits).
+function applyItemPatch(cat, idx, patch, newDate, logMsg) {
+  const fromMk = currentMonth;
+  const toMk = clampMonth(monthKeyOf(newDate));
+  const fmd = getMD();
+  if (toMk === fromMk) {
+    updateMonth({ [cat]: (fmd[cat]||[]).map((x,i)=>i===idx?patch:x) }, logMsg);
+    return;
+  }
+  const tmd = getMDFor(toMk);
+  pushUndo(logMsg || 'Edit item');
+  appState = { ...appState, months: { ...appState.months,
+    [fromMk]: { ...fmd, [cat]: (fmd[cat]||[]).filter((_,i)=>i!==idx) },
+    [toMk]:   { ...tmd, [cat]: [...(tmd[cat]||[]), patch] } } };
+  saveLocal(); render(); if (IN_GAS) scheduleSync();
+  logActivity(logMsg || 'edited item');
+}
+function saveItemEdit() {
+  const pe = pendingItemEdit;
+  if (!pe) return;
+  const date = document.getElementById('ie-date').value;
+  const paidChecked = document.getElementById('ie-paid').checked;
+  // Date is the transaction date for grocery/misc items (also drives which month
+  // they file into) — required. For Fixed rows it's just an optional due-date note.
+  if (!date && pe.kind !== 'fixed') { alert('Date is required'); return; }
+  if (paidChecked && !pe.chosenMethod && document.getElementById('ie-paid').dataset.wasPaid !== '1') {
+    alert('Choose a payment method'); return;
+  }
+
+  if (pe.kind === 'grocery' || pe.kind === 'misc') {
+    const amount = Math.round(Number(document.getElementById('ie-amount').value)||0);
+    if (!(amount > 0)) { alert('Amount is required'); return; }
+    const cat = pe.kind === 'grocery' ? 'groceries' : pe.cat;
+    const md = getMD();
+    const it = (md[cat]||[])[pe.idx];
+    if (!it) { cancelItemEdit(); return; }
+    const payMethod = paidChecked ? (pe.chosenMethod || it.payMethod || null) : null;
+    let patch, logName;
+    if (pe.kind === 'grocery') {
+      const vendor = document.getElementById('ie-vendor').value;
+      const category = document.getElementById('ie-cat').value;
+      patch = { ...it, vendor, category, amount, date, paid:paidChecked, payMethod };
+      logName = vendor;
+    } else {
+      const text = (document.getElementById('ie-name').value||'').trim();
+      if (!text) { alert('Name is required'); return; }
+      patch = { ...it, text, amount, date, paid:paidChecked, payMethod };
+      logName = text;
+    }
+    applyItemPatch(cat, pe.idx, patch, date, `edited ₹${amount} ${cat} (${logName})`);
+  } else if (pe.kind === 'fixed') {
+    const md = getMD();
+    const payMethod = paidChecked ? (pe.chosenMethod || (md.payMethod||{})[pe.key] || null) : null;
+    const patch = {
+      payDate: { ...(md.payDate||{}), [pe.key]: date },
+      paid: { ...md.paid, [pe.key]: paidChecked },
+      payMethod: { ...(md.payMethod||{}), [pe.key]: payMethod },
+    };
+    if (pe.amountEditable) {
+      const amount = Math.round(Number(document.getElementById('ie-amount').value)||0);
+      if (!(amount > 0)) { alert('Amount is required'); return; }
+      patch.bases = { ...(md.bases||{}), [pe.baseKey]: amount };
+    }
+    const rename = pe.nameEditable ? (document.getElementById('ie-name').value||'').trim() : '';
+    if (rename && rename !== pe.label) {
+      pushUndo(`renamed ${pe.label} to ${rename}`);
+      suppressUndo = true;
+      saveCustomFixedItems({ ...(appState.customFixedItems||{}), [pe.key]: { ...(appState.customFixedItems||{})[pe.key], label: rename } });
+      updateMonth(patch, `edited ${rename}`);
+      suppressUndo = false;
+    } else {
+      updateMonth(patch, `edited ${pe.label}`);
+    }
+  }
+  cancelItemEdit();
 }
 
 // Opens the bottom sheet for paying a specific CC billing cycle.
@@ -368,7 +564,7 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
       }
     });
   });
-  txns.sort((a, b) => new Date(a.date) - new Date(b.date));
+  txns.sort((a, b) => new Date(b.date) - new Date(a.date)); // newest first
   const cycleTotal = txns.reduce((s, t) => s + t.amount, 0);
   let html = `<div class="cc-cyc-review-header" style="display:flex;justify-content:space-between;align-items:center"><div><span class="cc-cyc-review-title">${esc(label)}</span><span class="cc-cyc-review-total">₹${inr(cycleTotal)}</span></div><button onclick="openCycleAddForm('${cardKey}')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:500">+ Add</button></div>`;
   if (txns.length) {
@@ -525,6 +721,10 @@ function dateChip(cur, onchangeAttr) {
   return `<span class="date-chip"><span class="date-chip-lbl">${cur?fmtDate(cur):'set date'}</span>`
        + `<input class="date-chip-inp" type="date" value="${esc(cur||'')}" ${onchangeAttr} title="Spend date"></span>`;
 }
+// Read-only date display (date is now edited via the pencil/edit sheet, not inline).
+function dateLabel(cur) {
+  return `<span class="date-lbl">${cur?fmtDate(cur):'no date'}</span>`;
+}
 
 // The billing cycle window that contains a given date.
 function ccCycleOf(cardKey, dateStr) {
@@ -594,7 +794,11 @@ function ccBuildCycles(cardKey) {
     else if (remaining <= 0)   { statusClass='ok';   statusLabel='Paid'; }
     else if (now > cyc.due)    { statusClass='over'; statusLabel='Overdue · was due ' + fmtDate(isoOf(cyc.due)) + left; }
     else                       { statusClass='due';  statusLabel='Due ' + fmtDate(isoOf(cyc.due)) + left; }
-    return { key: cyc.key, label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, remaining, statusClass, statusLabel };
+    // Countdown + progress bar (close date -> due date), only meaningful once the
+    // statement has actually closed (i.e. not for 'cur', which is still accruing).
+    const daysUntilDue = Math.round((cyc.due - now) / 86400000);
+    const cyclePct = Math.max(0, Math.min(100, Math.round((now - cyc.end) / (cyc.due - cyc.end) * 100)));
+    return { key: cyc.key, label: fmtDate(isoOf(cyc.start))+' – '+fmtDate(isoOf(cyc.end)), total, remaining, statusClass, statusLabel, daysUntilDue, cyclePct };
   });
   out.reverse(); // most recent first
   return { cycles: out, outstanding: totalCharged - totalPaid };
@@ -619,4 +823,4 @@ function deleteCcPayment(cardKey, idx) {
   if (item) moveToTrash({ kind:'ccPayment', cardKey, item });
   saveCcPayments({ ...cur, [cardKey]: cur[cardKey].filter((_,i) => i!==idx) }, 'deleted a CC payment');
 }
-
+

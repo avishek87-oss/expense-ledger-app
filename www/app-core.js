@@ -27,6 +27,7 @@ const MAIDS = [
   { key:'sujata',  label:'Sujata',  base:2800  },
 ];
 const SUKANYA = 12500;
+function sukanyaFee(mk) { return effectiveBase(mk, 'sukanya', SUKANYA); }
 const STORAGE_KEY = 'household-ledger-v1';
 const UI_KEY = 'household-ledger-ui-v1';
 const PENDING_SYNC_KEY = 'household-ledger-pending-sync-v1';
@@ -83,8 +84,6 @@ let currentMonth = todayMonthKey();
 let currentTab = 'home';
 let syncTimer = null;
 let uiPrefs = { collapsed: {} };
-let gDraft = { vendor:'Sagar', category:'veges', amount:'', date:'' };
-let miscDrafts = {};
 let pendingPay = null;
 let pendingCcPay = null; // { cardKey, cycleKey } while the CC pay sheet is open
 let pendingNehaXfer = null; // { direction } while the Neha transfer sheet is open
@@ -393,6 +392,22 @@ function inr(n) {
   const v = Math.round((n + Number.EPSILON)*100)/100;
   return v.toLocaleString('en-IN',{ maximumFractionDigits:2 });
 }
+function prefersReducedMotion() {
+  try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; }
+}
+// Counts a ₹ figure up from 0 to its target — used for the Home hero number on
+// tab entry only (not on every data-change re-render, which would be noisy).
+function animateCountUp(el, target, duration=550) {
+  if (!el || prefersReducedMotion()) { if (el) el.textContent = '₹' + inr(target); return; }
+  const t0 = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = '₹' + inr(target * eased);
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
 function addMonths(mk, d) {
   const [y,m] = mk.split('-').map(Number);
   const dt = new Date(y, m-1+d, 1);
@@ -558,8 +573,8 @@ function bizoneFee(mk) {
   const mo = parseInt(mk.split('-')[1]);
   return (mo===4||mo===10) ? effectiveBase(mk, 'bizone', 12285) : 0;
 }
-function englishFee(mk)  { return (mk==='2026-07'||mk==='2026-11') ? 10000 : 0; }
-function carEmiFee(mk)   { return (mk>='2022-08'&&mk<='2027-07') ? 37500 : 0; }
+function englishFee(mk)  { return (mk==='2026-07'||mk==='2026-11') ? effectiveBase(mk,'english',10000) : 0; }
+function carEmiFee(mk)   { return (mk>='2022-08'&&mk<='2027-07') ? effectiveBase(mk,'carEmi',37500) : 0; }
 function rentFee(mk) {
   if (mk<'2026-08') return 80000;
   if (mk==='2026-08') return 81548;
@@ -588,7 +603,7 @@ function applyTabChrome() {
   document.getElementById('month-nav').classList.toggle('hidden', currentTab==='outstanding');
   document.body.classList.toggle('no-month-nav', currentTab==='outstanding');
   const fab = document.getElementById('fab');
-  if (fab) fab.classList.toggle('hidden', currentTab!=='ledger'); // quick-add only on the Ledger tab
+  if (fab) fab.classList.remove('hidden'); // quick-add available from every tab
 }
 // Month-nav browsing window: never show months beyond the current one, and only
 // go back 3 months from today (independent of MIN_MONTH, which is the app's fixed
@@ -601,14 +616,29 @@ function shiftMonth(d) {
   const next = addMonths(currentMonth, d);
   if (next < navMinMonth() || next > todayMonthKey()) return;
   currentMonth = next;
-  gDraft = { vendor:'Sagar', category:'veges', amount:'' };
-  miscDrafts = {};
   render();
 }
 function jumpToday() {
   currentMonth = todayMonthKey();
-  gDraft = { vendor:'Sagar', category:'veges', amount:'' };
-  miscDrafts = {};
+  render();
+}
+// Popover to jump several months at once instead of repeated ‹/› taps — same
+// browsing window as the arrows (navMinMonth()..todayMonthKey()).
+function openMonthPicker() {
+  const grid = document.getElementById('month-picker-grid');
+  const months = [];
+  for (let mk = navMinMonth(); mk <= todayMonthKey(); mk = addMonths(mk, 1)) months.push(mk);
+  grid.innerHTML = months.map(mk => {
+    const short = monthLabel(mk).split(' ')[0];
+    return `<button class="month-pick-btn${mk===currentMonth?' active':''}" onclick="jumpToMonth('${mk}')">${short}</button>`;
+  }).join('');
+  document.getElementById('month-picker-overlay').classList.remove('hidden');
+  attachOverlayBackHandler('month-picker-overlay', closeMonthPicker);
+}
+function closeMonthPicker() { document.getElementById('month-picker-overlay').classList.add('hidden'); }
+function jumpToMonth(mk) {
+  currentMonth = mk;
+  closeMonthPicker();
   render();
 }
 
@@ -674,37 +704,15 @@ function toggleCustomClassDate(key, day) {
 }
 
 // ── Grocery ────────────────────────────────────────────────────────────────
-function captureGroceryDraft() {
-  const v=document.getElementById('g-vendor'); if(v) gDraft.vendor=v.value;
-  const c=document.getElementById('g-cat');    if(c) gDraft.category=c.value;
-  const a=document.getElementById('g-amt');    if(a) gDraft.amount=a.value;
-  const d=document.getElementById('g-date');   if(d) gDraft.date=d.value;
-}
-function addGrocery() {
-  captureGroceryDraft();
-  const amt = Number(gDraft.amount);
-  if (!amt) return;
-  const date = gDraft.date || today();
-  const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
-  const tmd = getMDFor(mk);
-  const entry = { vendor:gDraft.vendor, category:gDraft.category, amount:amt, date, paid:false };
-  gDraft.amount=''; gDraft.date='';
-  updateMonthFor(mk, { groceries:[...(tmd.groceries||[]),entry] }, `added ₹${amt} groceries (${entry.vendor})`);
-}
-function editGroceryDate(i, val) {
-  if (!val) return;
-  moveDatedItem('groceries', i, val);
-}
+function clampMonth(mk) { return (mk && mk >= MIN_MONTH) ? mk : MIN_MONTH; }
 function toggleGroceryPaid(i) {
   // Only called to UNMARK; marking goes through startPayment
-  captureGroceryDraft();
   const md = getMD();
   const item = (md.groceries||[])[i];
   updateMonth({ groceries:(md.groceries||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
     item && `unmarked ₹${item.amount} groceries (${item.vendor}) as paid`);
 }
 function deleteGrocery(i) {
-  captureGroceryDraft();
   const md = getMD();
   const item = (md.groceries||[])[i];
   if (item) moveToTrash({ kind:'month', mk: currentMonth, cat:'groceries', item });
@@ -712,56 +720,14 @@ function deleteGrocery(i) {
 }
 
 // ── Misc items ─────────────────────────────────────────────────────────────
-function captureMiscDraft(cat) {
-  const t=document.getElementById(`m-txt-${cat}`); if(t){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].text=t.value; }
-  const a=document.getElementById(`m-amt-${cat}`); if(a){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].amount=a.value; }
-  const d=document.getElementById(`m-date-${cat}`); if(d){ miscDrafts[cat]=miscDrafts[cat]||{}; miscDrafts[cat].date=d.value; }
-}
-function clampMonth(mk) { return (mk && mk >= MIN_MONTH) ? mk : MIN_MONTH; }
-function addMiscItem(cat) {
-  captureMiscDraft(cat);
-  const d = miscDrafts[cat] || {};
-  const text = (d.text||'').trim();
-  const amt  = Number(d.amount||0);
-  if (!text || !amt) return;
-  const date = d.date || today();
-  const mk = clampMonth(monthKeyOf(date));           // file into the month of the date
-  const tmd = getMDFor(mk);
-  miscDrafts[cat] = { text:'', amount:'', date:'' };
-  updateMonthFor(mk, { [cat]:[...(tmd[cat]||[]),{ text, amount:amt, paid:false, date }] }, `added ₹${amt} ${cat} (${text})`);
-}
-function editMiscDate(cat, i, val) {
-  if (!val) return;
-  moveDatedItem(cat, i, val);
-}
-// Change an array item's date; if the new date is in another month, move the item there.
-function moveDatedItem(cat, i, val) {
-  const fromMk = currentMonth;
-  const toMk   = clampMonth(monthKeyOf(val));
-  const fmd    = getMD();
-  const item   = (fmd[cat]||[])[i];
-  if (!item) return;
-  if (toMk === fromMk) {
-    updateMonth({ [cat]:(fmd[cat]||[]).map((x,idx)=>idx===i?{...x,date:val}:x) });
-    return;
-  }
-  const tmd = getMDFor(toMk);
-  pushUndo('Move item to ' + monthLabel(toMk));
-  appState = { ...appState, months: { ...appState.months,
-    [fromMk]: { ...fmd, [cat]: (fmd[cat]||[]).filter((_,idx)=>idx!==i) },
-    [toMk]:   { ...tmd, [cat]: [...(tmd[cat]||[]), { ...item, date: val }] } } };
-  saveLocal(); render(); if (IN_GAS) scheduleSync();
-}
 function toggleMiscPaid(cat,i) {
   // Only called to UNMARK; marking goes through startPayment
-  captureMiscDraft(cat);
   const md = getMD();
   const item = (md[cat]||[])[i];
   updateMonth({ [cat]:(md[cat]||[]).map((x,idx)=>idx===i?{...x,paid:false,payMethod:null}:x) },
     item && `unmarked ₹${item.amount} ${cat} (${item.text}) as paid`);
 }
 function deleteMiscItem(cat,i) {
-  captureMiscDraft(cat);
   const md = getMD();
   const item = (md[cat]||[])[i];
   if (item) moveToTrash({ kind:'month', mk: currentMonth, cat, item });

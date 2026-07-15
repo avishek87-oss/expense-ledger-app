@@ -14,7 +14,7 @@ function monthCategoryTotals(mk) {
     + (isDiscontinued('english',mk) ? 0 : englishFee(mk))
     + (md.aaviaMisc||[]).reduce((s,it)=>s+Number(it.amount||0),0)
     + customSectionTotal(mk, 'aavia');
-  const fixed = (isDiscontinued('sukanya',mk) ? 0 : SUKANYA)
+  const fixed = (isDiscontinued('sukanya',mk) ? 0 : sukanyaFee(mk))
     + (isDiscontinued('carEmi',mk) ? 0 : carEmiFee(mk))
     + (isDiscontinued('rent',mk) ? 0 : effectiveBase(mk,'rent',rentFee(mk)))
     + customSectionTotal(mk, 'fixed');
@@ -40,7 +40,7 @@ function heroSpendsHtml(mk) {
   const paidSum = paid.reduce((s,it) => s+it.amount, 0);
   const unpaid  = Math.max(0, t.total - paidSum);
   const srcRows = PAY_METHODS.filter(m => byM[m.key]).map(m =>
-    `<div class="hspend-row"><span>${m.label}</span><span class="mono">₹${inr(byM[m.key])}</span></div>`).join('');
+    `<div class="hspend-row"><span>${pmDot(m.key)}${m.label}</span><span class="mono">₹${inr(byM[m.key])}</span></div>`).join('');
   const unpaidRow = unpaid > 0.5
     ? `<div class="hspend-row due"><span>Unpaid</span><span class="mono">₹${inr(unpaid)}</span></div>` : '';
 
@@ -77,12 +77,90 @@ function closeMenu() {
 }
 function setMenuView(v) { menuView = v; renderMenu(); }
 
+// ── FAB: tap for Quick Add, hold for shortcuts to your most-repeated entries ──
+let fabPressTimer = null;
+let fabLongPressed = false;
+function fabPointerDown() {
+  fabLongPressed = false;
+  fabPressTimer = setTimeout(() => { fabLongPressed = true; doHaptic(); openFabShortcuts(); }, 550);
+}
+function fabPointerUp() { clearTimeout(fabPressTimer); }
+function fabClick() {
+  if (fabLongPressed) { fabLongPressed = false; return; } // already handled by the long-press
+  openQuickAdd();
+}
+function bindFabLongPress() {
+  const fab = document.getElementById('fab');
+  if (!fab || fab.dataset.lpBound) return;
+  fab.dataset.lpBound = '1';
+  fab.addEventListener('pointerdown', fabPointerDown);
+  fab.addEventListener('pointerup', fabPointerUp);
+  fab.addEventListener('pointerleave', fabPointerUp);
+  fab.addEventListener('pointercancel', fabPointerUp);
+}
+// Ranks past grocery/misc entries by how often the same vendor+category (or misc
+// text) was logged before, so the 3 most-repeated ones can be one-tap shortcuts.
+let fabShortcuts = [];
+function topQuickAddShortcuts() {
+  const counts = {};
+  Object.values(appState.months||{}).forEach(md => {
+    (md.groceries||[]).forEach(it => {
+      if (!it.vendor) return;
+      const key = 'groceries|' + it.vendor + '|' + it.category;
+      counts[key] = (counts[key]||0) + 1;
+    });
+    ['householdGroceries','householdMisc','nehaMisc','avishekMisc','aaviaMisc'].forEach(cat => {
+      (md[cat]||[]).forEach(it => {
+        const text = (it.text||'').trim();
+        if (!text) return;
+        const key = cat + '|' + text.toLowerCase() + '|' + text; // last segment preserves original casing
+        counts[key] = (counts[key]||0) + 1;
+      });
+    });
+  });
+  return Object.entries(counts)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0,3)
+    .map(([key,count]) => {
+      const [bucket, a, b] = key.split('|');
+      return bucket === 'groceries'
+        ? { bucket, vendor:a, category:b, label:`${a} · ${b}`, count }
+        : { bucket, text:b, label:b, count };
+    });
+}
+function openFabShortcuts() {
+  fabShortcuts = topQuickAddShortcuts();
+  const list = document.getElementById('qa-shortcuts-list');
+  list.innerHTML = fabShortcuts.length
+    ? fabShortcuts.map((s,i) => `<button class="add-btn" style="width:100%;margin-bottom:8px;text-align:left" onclick="applyFabShortcut(${i})">${esc(s.label)}</button>`).join('')
+    : `<div class="cc-empty">No repeated items yet — add a few with + and shortcuts will show up here.</div>`;
+  document.getElementById('qa-shortcuts-overlay').classList.remove('hidden');
+  attachOverlayBackHandler('qa-shortcuts-overlay', closeFabShortcuts);
+}
+function closeFabShortcuts() { document.getElementById('qa-shortcuts-overlay').classList.add('hidden'); }
+function applyFabShortcut(i) {
+  const s = fabShortcuts[i];
+  closeFabShortcuts();
+  if (!s) return;
+  openQuickAdd();
+  const bucketSel = document.getElementById('qa-bucket');
+  bucketSel.value = s.bucket;
+  qaBucketChanged();
+  if (s.bucket === 'groceries') {
+    document.getElementById('qa-vendor').value = s.vendor;
+    document.getElementById('qa-cat').value = s.category;
+  } else {
+    document.getElementById('qa-text').value = s.text;
+  }
+}
+
 // ── Quick-add (floating +) ─────────────────────────────────────────────────
 const QA_GROCERY = 'groceries';
 function openQuickAdd() {
   document.getElementById('qa-text').value = '';
   document.getElementById('qa-amt').value = '';
   document.getElementById('qa-date').value = today();
+  document.getElementById('qa-paid').checked = false;
   qaBucketChanged();
   const overlay = document.getElementById('qa-overlay');
   overlay.classList.remove('hidden');
@@ -109,6 +187,10 @@ function submitQuickAdd() {
     if (!text) return;
     entry = { text, amount: Math.round(amt), date, paid:false };
   }
+  if (document.getElementById('qa-paid').checked) {
+    startPayment('quickAdd', mk, bucket, entry);
+    return;
+  }
   updateMonthFor(mk, { [bucket]: [...(tmd[bucket]||[]), entry] },
     `added ₹${entry.amount} ${bucket} (${entry.vendor||entry.text})`);
   closeQuickAdd();
@@ -127,7 +209,7 @@ function fixedSearchEntries(mk) {
   const out = [];
   const chk = (key, amount) => {
     if (isDiscontinued(key, mk)) return;
-    if (amount > 0) out.push({ mk, cat:'fixed', i:-1, text: fixedLabel(key), amount, paid: !!md.paid[key] });
+    if (amount > 0) out.push({ mk, cat:'fixed', i:-1, text: fixedLabel(key), amount, paid: !!md.paid[key], payMethod: (md.payMethod||{})[key] || null });
   };
   MAIDS.forEach(m => chk(m.key, maidPayout(effectiveBase(mk, m.key, m.base), md.maidLeaves[m.key] ?? 2, dim)));
   if (mk>='2026-08' && mk<='2026-10') chk('japaMaid', (28000/dim) * (md.japaDaysPresent ?? defaultJapaDays(mk)));
@@ -138,7 +220,7 @@ function fixedSearchEntries(mk) {
   if (md.bharatnatyamAttended) chk('bharatnatyam', effectiveBase(mk,'bharatnatyam',1500));
   chk('chess',   (md.chessDates||[]).length   * effectiveBase(mk,'chessRate',500));
   chk('skating', (md.skatingDates||[]).length * effectiveBase(mk,'skatingRate',375));
-  chk('sukanya', SUKANYA);
+  chk('sukanya', sukanyaFee(mk));
   chk('carEmi',  carEmiFee(mk));
   chk('rent',    effectiveBase(mk,'rent', rentFee(mk)));
   ['maids','aavia','fixed','household','neha','avishek'].forEach(section => {
@@ -146,15 +228,28 @@ function fixedSearchEntries(mk) {
   });
   return out;
 }
+let searchFilters = { paid:'', cat:'', via:'' };
 function openSearch() {
   const overlay = document.getElementById('search-overlay');
   overlay.classList.remove('hidden');
   const inp = document.getElementById('search-inp');
-  inp.value = ''; renderSearch();
+  inp.value = '';
+  searchFilters = { paid:'', cat:'', via:'' };
+  document.getElementById('sf-cat').value = '';
+  document.getElementById('sf-via').value = '';
+  renderSearch();
   setTimeout(() => inp.focus(), 50);
   attachOverlayBackHandler('search-overlay', closeSearch);
 }
 function closeSearch() { document.getElementById('search-overlay').classList.add('hidden'); }
+function toggleSearchFilter(kind, val) {
+  searchFilters[kind] = searchFilters[kind] === val ? '' : val;
+  renderSearch();
+}
+function setSearchFilter(kind, val) {
+  searchFilters[kind] = val;
+  renderSearch();
+}
 function searchIndex() {
   return Object.keys(appState.months||{}).flatMap(mk => {
     const md = getMDFor(mk);
@@ -166,12 +261,25 @@ function searchIndex() {
 function renderSearch() {
   const q = (document.getElementById('search-inp').value || '').trim().toLowerCase();
   const box = document.getElementById('search-results');
-  if (!q) { box.innerHTML = `<div class="sr-empty">Type to search across all months.</div>`; return; }
+  document.getElementById('sf-unpaid').classList.toggle('active', searchFilters.paid === 'unpaid');
+  document.getElementById('sf-paid').classList.toggle('active', searchFilters.paid === 'paid');
+  const anyFilter = searchFilters.paid || searchFilters.cat || searchFilters.via;
+  if (!q && !anyFilter) { box.innerHTML = `<div class="sr-empty">Type to search, or use a filter above.</div>`; return; }
   const hits = searchIndex().filter(it => {
-    const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + (it.cat==='fixed' ? '' : ' ' + (it.amount||''))).toLowerCase();
-    return hay.includes(q);
-  }).sort((a,b) => (a.mk < b.mk ? 1 : -1)); // newest month first
-  if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches for “${esc(q)}”.</div>`; return; }
+    if (q) {
+      const hay = ((it.text||'') + ' ' + (it.vendor||'') + ' ' + (it.category||'') + ' ' + SEARCH_CATS[it.cat] + (it.cat==='fixed' ? '' : ' ' + (it.amount||''))).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (searchFilters.paid === 'unpaid' && it.paid) return false;
+    if (searchFilters.paid === 'paid' && !it.paid) return false;
+    if (searchFilters.cat && it.cat !== searchFilters.cat) return false;
+    if (searchFilters.via && it.payMethod !== searchFilters.via) return false;
+    return true;
+  }).sort((a,b) => { // newest date first (fixed entries have no exact date — treat as start-of-month)
+    const ka = a.date || (a.mk + '-01'), kb = b.date || (b.mk + '-01');
+    return kb.localeCompare(ka);
+  });
+  if (!hits.length) { box.innerHTML = `<div class="sr-empty">No matches${q?` for “${esc(q)}”`:''}.</div>`; return; }
   box.innerHTML = hits.slice(0, 100).map(it => {
     const name = it.cat === 'groceries' ? `${esc(it.vendor)} · ${esc(it.category)}` : esc(it.text||'');
     return `<div class="sr-item" onclick="jumpToSearch('${it.mk}')">
@@ -237,6 +345,50 @@ function bindSwipe() {
   body.addEventListener('touchmove',  swipeMove,  { passive:false });
   body.addEventListener('touchend',   swipeEnd,   { passive:true });
   body.addEventListener('touchcancel', swipeEnd,  { passive:true });
+}
+
+// ── Swipe to change month (delegated on #app-body, Ledger tab only) ────────
+// Only activates when the touch doesn't start on a row/control — those already
+// own horizontal swipes (delete/mark-paid above) or their own taps.
+let monthSwipe = null;
+function monthSwipeStart(e) {
+  if (currentTab !== 'ledger') { monthSwipe = null; return; }
+  // Exclude rows (their own swipe above) and specific action controls, but NOT
+  // .card-hd — it's a <button> too, yet is most of the screen's open surface,
+  // and a tap (near-zero movement) still reaches its onclick normally either way.
+  if (e.target.closest('.mitem, .g-item, .pbtn, .base-edit-btn, .del-btn, .sbtn, .chip, input, select, .date-chip')) { monthSwipe = null; return; }
+  const t = e.touches[0];
+  monthSwipe = { x0:t.clientX, y0:t.clientY, dx:0, lock:null };
+}
+function monthSwipeMove(e) {
+  if (!monthSwipe) return;
+  const t = e.touches[0];
+  const dx = t.clientX - monthSwipe.x0, dy = t.clientY - monthSwipe.y0;
+  if (monthSwipe.lock === null) {
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    monthSwipe.lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+  }
+  if (monthSwipe.lock !== 'h') { monthSwipe = null; return; } // vertical → let the page scroll
+  e.preventDefault();
+  monthSwipe.dx = dx;
+}
+function monthSwipeEnd() {
+  if (!monthSwipe) return;
+  const { dx, lock } = monthSwipe;
+  monthSwipe = null;
+  if (lock !== 'h') return;
+  const TH = 90;
+  if (dx < -TH)      { doHaptic(); shiftMonth(1); }
+  else if (dx > TH)  { doHaptic(); shiftMonth(-1); }
+}
+function bindMonthSwipe() {
+  const body = document.getElementById('app-body');
+  if (!body || body.dataset.monthSwipeBound) return;
+  body.dataset.monthSwipeBound = '1';
+  body.addEventListener('touchstart', monthSwipeStart, { passive:true });
+  body.addEventListener('touchmove',  monthSwipeMove,  { passive:false });
+  body.addEventListener('touchend',   monthSwipeEnd,   { passive:true });
+  body.addEventListener('touchcancel', () => { monthSwipe = null; }, { passive:true });
 }
 function signOut() { try { localStorage.removeItem(AUTH_KEY); } catch(e){} auth = null; closeMenu(); location.reload(); }
 function renderMenu() {
@@ -319,6 +471,20 @@ function cycleLockEnabled() {
   saveUI();
   renderMenu();
 }
+// Due-soon/overdue chip + a thin close-date→due-date progress bar. Only shown
+// once a statement has actually closed (statusClass 'due'/'over') — a 'cur'
+// cycle is still accruing charges, so a countdown to its future due date isn't
+// meaningful yet.
+function dueCountdownHtml(c) {
+  if (c.statusClass !== 'due' && c.statusClass !== 'over') return '';
+  const over = c.statusClass === 'over';
+  const cls = over ? 'over' : 'soon';
+  const label = over ? `Overdue ${Math.abs(c.daysUntilDue)}d` : (c.daysUntilDue <= 0 ? 'Due today' : `Due in ${c.daysUntilDue}d`);
+  return `<div class="cc-countdown">
+    <span class="cc-countdown-chip ${cls}">${label}</span>
+    <div class="cc-countdown-bar"><i class="${cls}" style="width:${c.cyclePct}%"></i></div>
+  </div>`;
+}
 function ccSectionHtml() {
   let html = '';
   Object.keys(CC_CYCLES).forEach(cardKey => {
@@ -333,8 +499,11 @@ function ccSectionHtml() {
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');
     html += visible.length
       ? visible.map(c => `<div class="cc-cyc" onclick="openCcCycleReview('${cardKey}','${c.key}','${esc(c.label)}',${c.total})">
-          <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
-          <div class="cc-cyc-amt">₹${inr(c.total)}</div>
+          <div class="cc-cyc-top">
+            <div class="cc-cyc-l"><div class="cc-cyc-win">${c.label}</div><div class="cc-cyc-sub ${c.statusClass}">${c.statusLabel}</div></div>
+            <div class="cc-cyc-amt">₹${inr(c.total)}</div>
+          </div>
+          ${dueCountdownHtml(c)}
         </div>`).join('')
       : (b.cycles.length ? `<div class="cc-empty">All cycles paid up ✓</div>`
                          : `<div class="cc-empty">No spends on this card yet</div>`);
@@ -553,7 +722,7 @@ function sourceSpendsHtml() {
     const paidSum = paid.reduce((s,it) => s+it.amount, 0);
     const unpaid  = Math.max(0, monthCategoryTotals(mk).total - paidSum);
     const rows = PAY_METHODS.filter(m => byM[m.key]).map(m =>
-      `<div class="ms-row"><span>${m.label}</span><span>₹${inr(byM[m.key])}</span></div>`).join('');
+      `<div class="ms-row"><span>${pmDot(m.key)}${m.label}</span><span>₹${inr(byM[m.key])}</span></div>`).join('');
     const unpaidRow = unpaid > 0.5
       ? `<div class="ms-row"><span style="color:var(--maroon)">Unpaid</span><span style="color:var(--maroon)">₹${inr(unpaid)}</span></div>` : '';
     return `<section class="ms-month">

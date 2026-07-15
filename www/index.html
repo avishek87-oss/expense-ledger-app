@@ -90,20 +90,21 @@
         <span id="sync-lbl">Sheets</span>
       </div>
     </div>
-    <div id="tab-bar">
-      <button id="tab-home"        class="tab-btn active" onclick="switchTab('home')">Home</button>
-      <button id="tab-ledger"      class="tab-btn"        onclick="switchTab('ledger')">Ledger</button>
-      <button id="tab-outstanding" class="tab-btn"        onclick="switchTab('outstanding')">Outstanding</button>
-      <button id="tab-payments"    class="tab-btn"        onclick="switchTab('payments')">Payments</button>
-    </div>
     <div id="month-nav">
       <button class="nav-btn" onclick="shiftMonth(-1)" aria-label="Previous month">‹</button>
-      <span id="month-lbl"></span>
+      <span id="month-lbl" onclick="openMonthPicker()"></span>
       <button class="nav-btn" onclick="shiftMonth(1)" aria-label="Next month">›</button>
       <button id="today-jump" class="today-jump hidden" onclick="jumpToday()">Today</button>
     </div>
   </div>
 </div>
+
+<nav id="bottom-nav">
+  <button id="tab-home"        class="tab-btn active" onclick="switchTab('home')"><span class="tab-ic">🏠</span><span class="tab-lbl">Home</span></button>
+  <button id="tab-ledger"      class="tab-btn"        onclick="switchTab('ledger')"><span class="tab-ic">📒</span><span class="tab-lbl">Ledger</span></button>
+  <button id="tab-outstanding" class="tab-btn"        onclick="switchTab('outstanding')"><span class="tab-ic">⏳</span><span class="tab-lbl">Outstanding</span></button>
+  <button id="tab-payments"    class="tab-btn"        onclick="switchTab('payments')"><span class="tab-ic">💳</span><span class="tab-lbl">Payments</span></button>
+</nav>
 
 <div id="sync-fail-banner" class="hidden" role="alert">
   <span id="sync-fail-msg">Couldn't save to Sheets — will keep retrying</span>
@@ -118,7 +119,7 @@
 </main>
 
 <!-- Quick-add floating button + sheet -->
-<button id="fab" onclick="openQuickAdd()" aria-label="Quick add expense">+</button>
+<button id="fab" onclick="fabClick()" aria-label="Quick add expense" title="Hold for shortcuts">+</button>
 <div id="qa-overlay" class="pay-overlay hidden" onclick="closeQuickAdd()">
   <div class="pay-sheet" onclick="event.stopPropagation()">
     <div class="pay-sheet-title">Quick add</div>
@@ -139,8 +140,25 @@
       <input id="qa-amt" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
       <input id="qa-date" class="cc-date" type="date">
     </div>
+    <label class="chk-row"><input type="checkbox" id="qa-paid"> Mark as already paid</label>
     <button class="add-btn cc-pay-confirm" onclick="submitQuickAdd()">Add expense</button>
     <button class="pay-cancel" onclick="closeQuickAdd()">Cancel</button>
+  </div>
+</div>
+
+<div id="qa-shortcuts-overlay" class="pay-overlay hidden" onclick="closeFabShortcuts()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title">Quick shortcuts</div>
+    <div id="qa-shortcuts-list"></div>
+    <button class="pay-cancel" onclick="closeFabShortcuts()">Cancel</button>
+  </div>
+</div>
+
+<div id="month-picker-overlay" class="pay-overlay hidden" onclick="closeMonthPicker()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title">Jump to month</div>
+    <div id="month-picker-grid" class="month-picker-grid"></div>
+    <button class="pay-cancel" onclick="closeMonthPicker()">Cancel</button>
   </div>
 </div>
 
@@ -175,6 +193,28 @@
     <input id="search-inp" type="search" placeholder="Search all transactions…" oninput="renderSearch()" autocomplete="off">
     <button class="search-close" onclick="closeSearch()" aria-label="Close">✕</button>
   </div>
+  <div class="search-filters">
+    <button class="sf-chip" id="sf-unpaid" onclick="toggleSearchFilter('paid','unpaid')">Unpaid</button>
+    <button class="sf-chip" id="sf-paid" onclick="toggleSearchFilter('paid','paid')">Paid</button>
+    <select id="sf-cat" class="sel sf-select" onchange="setSearchFilter('cat',this.value)">
+      <option value="">Category</option>
+      <option value="groceries">Groceries</option>
+      <option value="householdGroceries">HH Groceries</option>
+      <option value="householdMisc">HH Misc</option>
+      <option value="aaviaMisc">Aavia</option>
+      <option value="nehaMisc">Neha</option>
+      <option value="avishekMisc">Avishek</option>
+      <option value="fixed">Fixed</option>
+    </select>
+    <select id="sf-via" class="sel sf-select" onchange="setSearchFilter('via',this.value)">
+      <option value="">Via</option>
+      <option value="axisCC">Axis CC</option>
+      <option value="scapiaCC">Scapia CC</option>
+      <option value="avishekBank">Avishek Bank</option>
+      <option value="nehaCash">Neha Cash</option>
+      <option value="nehaBank">Neha Bank</option>
+    </select>
+  </div>
   <div id="search-results"></div>
 </div>
 
@@ -197,6 +237,25 @@
       Continue with Google
     </button>
     <div id="login-err" class="login-err"></div>
+  </div>
+</div>
+
+<div id="item-edit-overlay" class="pay-overlay hidden" onclick="cancelItemEdit()">
+  <div class="pay-sheet" onclick="event.stopPropagation()">
+    <div class="pay-sheet-title" id="ie-title">Edit item</div>
+    <input id="ie-name" class="misc-txt" style="width:100%;margin-bottom:10px" type="text" placeholder="item name">
+    <div id="ie-grocery-row" style="display:none;gap:8px;margin-bottom:10px">
+      <select id="ie-vendor" class="sel" style="flex:1"><option>Sagar</option><option>Ajit</option></select>
+      <select id="ie-cat" class="sel" style="flex:1"><option value="veges">veges</option><option value="fruits">fruits</option><option value="other">other</option></select>
+    </div>
+    <div class="cc-pay-fields">
+      <input id="ie-amount" class="misc-amt" type="number" inputmode="numeric" placeholder="amount">
+      <input id="ie-date" class="cc-date" type="date">
+    </div>
+    <label class="chk-row"><input type="checkbox" id="ie-paid" onchange="iePaidChanged()"> Paid <span id="ie-paid-method" class="lrow-sub"></span></label>
+    <button class="add-btn cc-pay-confirm" onclick="saveItemEdit()">Save</button>
+    <button class="pay-cancel" onclick="cancelItemEdit()">Cancel</button>
+    <button id="ie-delete-btn" class="delete-item-btn" onclick="deleteItemFromEdit()">Delete item</button>
   </div>
 </div>
 
