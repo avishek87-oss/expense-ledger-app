@@ -7,7 +7,7 @@ function paidChip(key, paid) {
 }
 // editSpec = { baseKey, baseDefault, nameEditable, amountEditable } drives the pencil
 // button's edit sheet; pass null to skip the pencil for a row (rare — see call sites).
-function ledgerRow(key, label, sub, amount, paid, controls='', editSpec=null) {
+function ledgerRow(key, label, sub, amount, paid, controls='', editSpec=null, isFixed=false) {
   const pd = (getMD().payDate||{})[key] || '';
   const es = editSpec || {};
   const amountEditable = es.amountEditable !== false;
@@ -15,7 +15,7 @@ function ledgerRow(key, label, sub, amount, paid, controls='', editSpec=null) {
     ? `<button class="base-edit-btn" title="Edit" onclick="openFixedItemEdit('${key}','${esc(label)}','${es.baseKey||key}',${es.baseDefault ?? amount},${!!es.nameEditable},${amountEditable})">✎</button>`
     : '';
   return `
-<div class="lrow" data-key="${key}" data-amount="${amount}" data-paid="${!!paid}">
+<div class="lrow${isFixed?' lrow-fixed':''}" data-key="${key}" data-amount="${amount}" data-paid="${!!paid}">
   <div class="lrow-main">
     <div class="lrow-left">
       <div class="lrow-label">${esc(label)}</div>
@@ -56,6 +56,7 @@ function dateChips(mk, dim, dates, onclickFor) {
 // "Stop tracking" (formerly a 🗑 button on every row) now lives inside the
 // pencil's edit sheet instead — see openFixedItemEdit()/deleteItemFromEdit().
 function customItemsSectionHtml(mk, section, md, dim) {
+  const isFixed = section === 'fixed';
   return activeCustomItems(mk, section).map(it => {
     const amount = customItemAmount(mk, it.key, it);
     if (it.type === 'leaveProrated') {
@@ -63,14 +64,14 @@ function customItemsSectionHtml(mk, section, md, dim) {
       const leaves = md.maidLeaves[it.key] ?? 0;
       return ledgerRow(it.key, it.label, `base ₹${inr(base)} · ${leaves} leave${leaves===1?'':'s'} this month`, amount, !!md.paid[it.key],
         `<div class="field"><span class="field-lbl">Leaves taken</span>${stepper(`changeLeaves('${it.key}',-1)`,`changeLeaves('${it.key}',1)`,leaves)}</div>`,
-        { baseKey:it.key, baseDefault:base, nameEditable:true });
+        { baseKey:it.key, baseDefault:base, nameEditable:true }, isFixed);
     }
     if (it.type === 'attendance') {
       const attended = !!(md.customAttended||{})[it.key];
       const base = effectiveBase(mk, it.key, it.amount);
       return ledgerRow(it.key, it.label, `₹${inr(base)} flat if attended this month`, amount, !!md.paid[it.key],
         `<label class="chk-row"><input type="checkbox" ${attended?'checked':''} onchange="toggleCustomAttended('${it.key}')"> Attended this month</label>`,
-        { baseKey:it.key, baseDefault:base, nameEditable:true });
+        { baseKey:it.key, baseDefault:base, nameEditable:true }, isFixed);
     }
     if (it.type === 'perClassDate') {
       const rate = effectiveBase(mk, it.key+'Rate', it.rate);
@@ -78,10 +79,10 @@ function customItemsSectionHtml(mk, section, md, dim) {
       const chips = dateChips(mk, dim, dates, day => `toggleCustomClassDate('${it.key}',${day})`);
       return ledgerRow(it.key, it.label, `₹${inr(rate)} × ${dates.length} class${dates.length===1?'':'es'}`, amount, !!md.paid[it.key],
         chips,
-        { baseKey:it.key+'Rate', baseDefault:rate, nameEditable:true });
+        { baseKey:it.key+'Rate', baseDefault:rate, nameEditable:true }, isFixed);
     }
     return ledgerRow(it.key, it.label, 'flat, custom', amount, !!md.paid[it.key], '',
-      { baseKey:it.key, baseDefault:effectiveBase(mk, it.key, it.amount), nameEditable:true });
+      { baseKey:it.key, baseDefault:effectiveBase(mk, it.key, it.amount), nameEditable:true }, isFixed);
   }).join('');
 }
 // Sorts items for display (newest date first) while keeping each item's original
@@ -393,9 +394,9 @@ function render() {
 
   // Fixed
   let fixedBody = '';
-  if (!sukanyaDiscontinued) fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',sukanyaAmt,!!md.paid.sukanya, '', { baseKey:'sukanya', baseDefault:sukanyaAmt });
-  if (!carEmiDiscontinued) fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi, '', { baseKey:'carEmi', baseDefault:carEmi });
-  if (!rentDiscontinued) fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, '', { baseKey:'rent', baseDefault:rent });
+  if (!sukanyaDiscontinued) fixedBody += ledgerRow('sukanya','Sukanya Samriddhi','flat, indefinite',sukanyaAmt,!!md.paid.sukanya, '', { baseKey:'sukanya', baseDefault:sukanyaAmt }, true);
+  if (!carEmiDiscontinued) fixedBody += ledgerRow('carEmi','Car EMI', carEmi?'Aug 2022 – Jul 2027':'outside loan tenure', carEmi, !!md.paid.carEmi, '', { baseKey:'carEmi', baseDefault:carEmi }, true);
+  if (!rentDiscontinued) fixedBody += ledgerRow('rent','Rent', `₹${inr(rent)}/mo`, rent, !!md.paid.rent, '', { baseKey:'rent', baseDefault:rent }, true);
   fixedBody += customItemsSectionHtml(currentMonth, 'fixed', md, dim);
 
   // Household
@@ -487,6 +488,7 @@ function homeSidebarHtml() {
     { id: 'neha',    label: 'Neha\nBank',     icon: svgBank() },
     { id: 'trends',  label: 'Trends',         icon: svgTrends() },
     { id: 'budgets', label: 'Budgets',        icon: svgBudget() },
+    { id: 'daily',   label: 'Daily\nExpenses', icon: svgDaily() },
   ];
   return tiles.map(t => `
     <button class="home-tile${currentHomeTile===t.id?' active':''}" onclick="setHomeTile('${t.id}')">
@@ -500,6 +502,7 @@ function homeTileContentHtml() {
     case 'neha':    return nehaBankSectionHtml();
     case 'trends':  return trendsSectionHtml();
     case 'budgets': return budgetsSectionHtml();
+    case 'daily':   return dailyExpensesSectionHtml();
     default:        return homeSummaryContentHtml();
   }
 }
@@ -541,6 +544,47 @@ function svgTrends() {
 }
 function svgBudget() {
   return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2 A10 10 0 0 1 22 12 L12 12 Z" fill="currentColor" stroke="none"/><line x1="12" y1="12" x2="6.3" y2="19.1"/></svg>`;
+}
+function svgDaily() {
+  return `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>`;
+}
+// Expenses for one specific calendar day (variable/misc items only — fixed
+// recurring items have no true per-item date, so they're excluded here).
+function dailyExpensesSectionHtml() {
+  const mk = monthKeyOf(currentDailyDate);
+  const md = getMDFor(mk);
+  const cats = ['householdGroceries','householdMisc','aaviaMisc','nehaMisc','avishekMisc'];
+  const items = [];
+  cats.forEach(cat => (md[cat]||[]).forEach((it,i) => {
+    if (it.date === currentDailyDate) items.push({ cat, i, ...it });
+  }));
+  const total = items.reduce((s,it)=>s+Number(it.amount||0),0);
+  const dateLbl = currentDailyDate === today() ? 'Today' : fmtDate(currentDailyDate);
+  const rows = items.length ? items.map(it => `
+    <div class="mitem" data-paid="${!!it.paid}">
+      <div class="mitem-left">
+        <div class="mitem-txt">${esc(it.text)}</div>
+        <div class="mitem-date">${SEARCH_CATS[it.cat]}</div>
+      </div>
+      <div class="mitem-right">
+        <div class="mitem-amt-col">
+          <span class="mitem-amt">₹${inr(it.amount)}</span>
+          ${it.paid ? pmChip(it.payMethod) : ''}
+        </div>
+      </div>
+    </div>`).join('') : `<div class="cc-empty">No expenses this day</div>`;
+  return `<section class="cc-card">
+    <div class="cc-head">
+      <span class="cc-name">Daily Expenses</span>
+      <span class="cc-out"><small>₹${inr(total)}</small></span>
+    </div>
+    <div class="daily-nav">
+      <button class="nav-btn" onclick="shiftDailyDate(-1)" aria-label="Previous day">‹</button>
+      <span class="daily-nav-lbl">${dateLbl}</span>
+      <button class="nav-btn" onclick="shiftDailyDate(1)" aria-label="Next day">›</button>
+    </div>
+    ${rows}
+  </section>`;
 }
 function homeCcCardHtml() {
   const cards = Object.keys(CC_CYCLES).map(cardKey => {
@@ -593,6 +637,7 @@ function homeBudgetCardHtml() {
 // ── Payments render ────────────────────────────────────────────────────────
 function renderPayments() {
   const allPaid = collectPaidItems(currentMonth);
+  allPaid.sort((a,b) => (a.date||'').localeCompare(b.date||''));
   const byMethod = {};
   const unknown  = [];
   allPaid.forEach(it => it.method ? ((byMethod[it.method] = byMethod[it.method]||[]).push(it)) : unknown.push(it));

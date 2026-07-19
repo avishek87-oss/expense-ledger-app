@@ -85,6 +85,14 @@ let currentTab = 'home';
 let ledgerDrilldown = null; // null | 'household'|'neha'|'aavia'|'avishek'|'maids'|'fixed'
 let currentHomeTile = 'summary';
 function setHomeTile(name) { currentHomeTile = name; render(); }
+let currentDailyDate = today();
+function shiftDailyDate(delta) {
+  const [y,m,d] = currentDailyDate.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate() + delta);
+  currentDailyDate = isoOf(dt);
+  render();
+}
 let syncTimer = null;
 let uiPrefs = { collapsed: {} };
 let pendingPay = null;
