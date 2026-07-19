@@ -371,6 +371,44 @@ function bindMonthSwipe() {
   body.addEventListener('touchend',   monthSwipeEnd,   { passive:true });
   body.addEventListener('touchcancel', () => { monthSwipe = null; }, { passive:true });
 }
+// ── Swipe to change day (delegated on #summary, Daily Expenses home tile only) ──
+let dailySwipe = null;
+function dailySwipeStart(e) {
+  if (currentTab !== 'home' || currentHomeTile !== 'daily') { dailySwipe = null; return; }
+  if (e.target.closest('.mitem, .nav-btn')) { dailySwipe = null; return; }
+  const t = e.touches[0];
+  dailySwipe = { x0:t.clientX, y0:t.clientY, dx:0, lock:null };
+}
+function dailySwipeMove(e) {
+  if (!dailySwipe) return;
+  const t = e.touches[0];
+  const dx = t.clientX - dailySwipe.x0, dy = t.clientY - dailySwipe.y0;
+  if (dailySwipe.lock === null) {
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    dailySwipe.lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+  }
+  if (dailySwipe.lock !== 'h') { dailySwipe = null; return; }
+  e.preventDefault();
+  dailySwipe.dx = dx;
+}
+function dailySwipeEnd() {
+  if (!dailySwipe) return;
+  const { dx, lock } = dailySwipe;
+  dailySwipe = null;
+  if (lock !== 'h') return;
+  const TH = 90;
+  if (dx < -TH)      { doHaptic(); shiftDailyDate(1); }
+  else if (dx > TH)  { doHaptic(); shiftDailyDate(-1); }
+}
+function bindDailySwipe() {
+  const el = document.getElementById('summary');
+  if (!el || el.dataset.dailySwipeBound) return;
+  el.dataset.dailySwipeBound = '1';
+  el.addEventListener('touchstart', dailySwipeStart, { passive:true });
+  el.addEventListener('touchmove',  dailySwipeMove,  { passive:false });
+  el.addEventListener('touchend',   dailySwipeEnd,   { passive:true });
+  el.addEventListener('touchcancel', () => { dailySwipe = null; }, { passive:true });
+}
 function signOut() { try { localStorage.removeItem(AUTH_KEY); } catch(e){} auth = null; closeMenu(); location.reload(); }
 function renderMenu() {
   const el = document.getElementById('menu-content');
@@ -527,7 +565,6 @@ function nehaBankSectionHtml() {
       <span class="cc-out ${balance>=0?'ok':'due'}">₹${inr(balance)} <small>balance</small></span>
     </div>
     ${nehaBalanceEditControl(nb.initialBalance)}
-    <button class="add-btn" style="width:100%;margin:10px 0 4px" onclick="openUpiBalance()">↗ Check Balance via UPI</button>
     <div class="cc-cyc" style="cursor:default">
       <div class="cc-cyc-l"><div class="cc-cyc-win">Transfers (net)</div></div>
       <div class="cc-cyc-amt">${transferNet>=0?'+':'−'}₹${inr(Math.abs(transferNet))}</div>
@@ -559,11 +596,6 @@ function nehaBankSectionHtml() {
   }
   html += `</section>`;
   return html;
-}
-
-function openUpiBalance() {
-  sessionStorage.setItem('upi-balance-pending', '1');
-  window.open('upi://pay', '_system');
 }
 
 // ── Budgets menu view ──────────────────────────────────────────────────────
