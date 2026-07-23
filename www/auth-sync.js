@@ -112,6 +112,7 @@ function fetchWithTimeout(url, opts, ms) {
 }
 
 function scheduleSync() {
+  appState.updatedAt = Date.now(); // stamp the edit that triggered this sync
   setPendingSync(true);
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500);
@@ -165,6 +166,22 @@ async function pushToSheets() {
       setPendingSync(false);
       consecutivePushFailures = 0;
       syncFailBannerDismissed = false;
+      // Server kept its own newer copy instead of ours (e.g. this push was
+      // a days-stale cached appState retried fire-and-forget at boot, and
+      // Code.gs's saveData() staleness guard rejected it) — adopt the
+      // authoritative copy now instead of waiting for the next pull. Skip
+      // if a newer local edit landed while this request was in flight
+      // (pushDirty) — that edit is already queued for the next push and
+      // must not be reverted by this reconciliation.
+      if (j.accepted === false && j.data && !pushDirty) {
+        try {
+          appState = JSON.parse(j.data);
+          migrateGroceries();
+          saveLocal();
+          render();
+          renderMenu();
+        } catch (e) {}
+      }
     } else {
       consecutivePushFailures++;
     }
