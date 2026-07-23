@@ -453,10 +453,17 @@ footer{text-align:center;font-family:var(--sans);font-size:11px;color:var(--mute
 .delete-item-btn{width:100%;background:none;border:none;padding:14px;font-family:var(--sans);font-size:13px;color:var(--maroon);cursor:pointer;min-height:44px;-webkit-tap-highlight-color:transparent;margin-top:10px;border-top:1px solid var(--border)}
 /* Header search button */
 #search-btn{background:none;border:none;color:var(--ink);line-height:1;cursor:pointer;padding:4px 6px;min-height:40px;min-width:40px;-webkit-tap-highlight-color:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-/* Quick-add FAB */
-#fab{position:fixed;right:20px;bottom:calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 16px);z-index:145;width:56px;height:56px;border-radius:50%;border:none;background:var(--accent);color:var(--on-accent);font-size:30px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(20,25,45,.28);-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;transition:transform .12s ease}
+/* Quick-add FAB — position (left/right/top/bottom) is set inline by
+   applyFabPosition() (app-core.js), not here, so a saved drag position never
+   fights the stylesheet default; this rule only owns the button's look and
+   its transitions. */
+#fab{position:fixed;z-index:145;width:56px;height:56px;border-radius:50%;border:none;background:var(--accent);color:var(--on-accent);font-size:30px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(20,25,45,.28);-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;transition:transform .12s ease,left .22s ease,right .22s ease,top .22s ease,bottom .22s ease}
 #fab:active{transform:scale(.92)}
 #fab.hidden{display:none}
+/* While actively being dragged, position must track the pointer with zero
+   lag — the snap-into-place animation only happens after release, once this
+   class is removed and the transition above re-applies. */
+#fab.fab-dragging{transition:transform .12s ease}
 /* Search overlay */
 .search-overlay{position:fixed;inset:0;z-index:340;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
 .search-overlay.hidden{display:none}

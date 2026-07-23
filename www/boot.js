@@ -250,6 +250,7 @@ async function boot() {
   loadUI();
   applyTheme();
   applyStyle();
+  applyFabPosition();
   loadAuth();
   pruneTrash();
   render();

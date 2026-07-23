@@ -77,16 +77,68 @@ function closeMenu() {
 }
 function setMenuView(v) { menuView = v; renderMenu(); }
 
-// ── FAB: tap for Quick Add, hold for shortcuts to your most-repeated entries ──
+// ── FAB: tap for Quick Add, hold for shortcuts, drag to reposition ─────────
+// Tap/hold/drag are disambiguated by movement: a plain press starts the
+// existing 550ms hold-for-shortcuts timer; if the pointer moves past
+// FAB_DRAG_THRESHOLD before that (or before release), it's a drag instead —
+// the hold timer is cancelled and neither the shortcuts menu nor Quick Add
+// opens. Only a press that stays still the whole time reaches fabClick().
+const FAB_DRAG_THRESHOLD = 10;
 let fabPressTimer = null;
-let fabLongPressed = false;
-function fabPointerDown() {
-  fabLongPressed = false;
-  fabPressTimer = setTimeout(() => { fabLongPressed = true; doHaptic(); openFabShortcuts(); }, 550);
+let fabSuppressClick = false;
+let fabDragging = false;
+let fabDragStartX = null, fabDragStartY = null, fabDragOffX = 0, fabDragOffY = 0;
+function fabPointerDown(e) {
+  fabSuppressClick = false;
+  fabDragging = false;
+  fabDragStartX = e.clientX;
+  fabDragStartY = e.clientY;
+  const rect = e.currentTarget.getBoundingClientRect();
+  fabDragOffX = e.clientX - rect.left;
+  fabDragOffY = e.clientY - rect.top;
+  fabPressTimer = setTimeout(() => { fabSuppressClick = true; doHaptic(); openFabShortcuts(); }, 550);
 }
-function fabPointerUp() { clearTimeout(fabPressTimer); }
+function fabPointerMove(e) {
+  if (fabDragStartX === null) return;
+  const fab = e.currentTarget;
+  const dx = e.clientX - fabDragStartX, dy = e.clientY - fabDragStartY;
+  if (!fabDragging && Math.hypot(dx, dy) > FAB_DRAG_THRESHOLD) {
+    fabDragging = true;
+    fabSuppressClick = true;
+    clearTimeout(fabPressTimer);
+    fab.classList.add('fab-dragging');
+    try { fab.setPointerCapture(e.pointerId); } catch (err) {}
+  }
+  if (!fabDragging) return;
+  const w = fab.offsetWidth || 56, h = fab.offsetHeight || 56;
+  let left = e.clientX - fabDragOffX;
+  let top = e.clientY - fabDragOffY;
+  left = Math.max(4, Math.min(window.innerWidth - w - 4, left));
+  const range = fabVerticalRange(h);
+  top = Math.max(range.min, Math.min(range.max, top));
+  fab.style.left = left + 'px';
+  fab.style.right = '';
+  fab.style.top = top + 'px';
+  fab.style.bottom = '';
+}
+function fabPointerUp(e) {
+  clearTimeout(fabPressTimer);
+  const fab = e.currentTarget;
+  if (fabDragging) {
+    fabDragging = false;
+    fab.classList.remove('fab-dragging');
+    try { fab.releasePointerCapture(e.pointerId); } catch (err) {}
+    const rect = fab.getBoundingClientRect();
+    const h = fab.offsetHeight || 56;
+    const side = (rect.left + rect.width / 2) < (window.innerWidth / 2) ? 'left' : 'right';
+    uiPrefs.fabPos = { side, topFrac: fabPxToTopFrac(rect.top, h) };
+    saveUI();
+    applyFabPosition(); // animates the snap into place (CSS transition on #fab)
+  }
+  fabDragStartX = null;
+}
 function fabClick() {
-  if (fabLongPressed) { fabLongPressed = false; return; } // already handled by the long-press
+  if (fabSuppressClick) { fabSuppressClick = false; return; } // handled by hold or drag above
   openQuickAdd();
 }
 function bindFabLongPress() {
@@ -94,6 +146,7 @@ function bindFabLongPress() {
   if (!fab || fab.dataset.lpBound) return;
   fab.dataset.lpBound = '1';
   fab.addEventListener('pointerdown', fabPointerDown);
+  fab.addEventListener('pointermove', fabPointerMove);
   fab.addEventListener('pointerup', fabPointerUp);
   fab.addEventListener('pointerleave', fabPointerUp);
   fab.addEventListener('pointercancel', fabPointerUp);
@@ -452,6 +505,7 @@ function renderMenu() {
       <a class="menu-link" onclick="cycleLockEnabled()">Screen Lock <span>${lockLabel()}</span></a>
       <a class="menu-link" onclick="cycleTheme()">Appearance <span>${themeLabel()}</span></a>
       <a class="menu-link" onclick="cycleStyle()">Theme <span>${styleLabel()}</span></a>
+      <a class="menu-link" onclick="resetFabPosition()">Quick-add button <span>Reset position</span></a>
     `;
     return;
   }

@@ -376,6 +376,50 @@ function cycleStyle() {
 function styleLabel() {
   return STYLE_NAMES[stylePref()] || 'Classic';
 }
+
+// ── Quick-add FAB position (device-local UI preference, never synced) ─────
+// Stored as { side: 'left'|'right', topFrac: 0..1 } — a fraction of the safe
+// vertical range rather than raw pixels, so a saved position still makes
+// sense after a resize/rotation instead of drifting off-screen or under the
+// header/nav bars.
+function fabVerticalRange(fabHeight) {
+  const hdr = document.getElementById('hdr');
+  const nav = document.getElementById('bottom-nav');
+  const minTop = (hdr ? hdr.getBoundingClientRect().bottom : 0) + 8;
+  const maxTop = (nav ? nav.getBoundingClientRect().top : window.innerHeight) - fabHeight - 8;
+  return { min: minTop, max: Math.max(minTop, maxTop) };
+}
+function fabTopFracToPx(frac, fabHeight) {
+  const { min, max } = fabVerticalRange(fabHeight);
+  return min + frac * (max - min);
+}
+function fabPxToTopFrac(px, fabHeight) {
+  const { min, max } = fabVerticalRange(fabHeight);
+  if (max <= min) return 0;
+  return Math.max(0, Math.min(1, (px - min) / (max - min)));
+}
+function applyFabPosition() {
+  const fab = document.getElementById('fab');
+  if (!fab) return;
+  const pos = uiPrefs.fabPos;
+  if (!pos) {
+    fab.style.left = ''; fab.style.top = '';
+    fab.style.right = '20px';
+    fab.style.bottom = 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 16px)';
+    return;
+  }
+  const h = fab.offsetHeight || 56;
+  fab.style.top = fabTopFracToPx(pos.topFrac, h) + 'px';
+  fab.style.bottom = '';
+  if (pos.side === 'left') { fab.style.left = '20px'; fab.style.right = ''; }
+  else { fab.style.right = '20px'; fab.style.left = ''; }
+}
+function resetFabPosition() {
+  delete uiPrefs.fabPos;
+  saveUI();
+  applyFabPosition();
+  renderMenu();
+}
 // Reads the theme's actual --bg (works for any style, not just classic) so the
 // Android status bar / task-switcher color always matches what's on screen.
 function syncThemeColorMeta() {
