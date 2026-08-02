@@ -195,6 +195,58 @@ async function pushToSheets() {
   if (pushDirty) { pushDirty = false; scheduleSync(); }
 }
 
+// The Sheet is always authoritative. Local state may only ever contribute
+// transactions the Sheet doesn't have yet — never overwrite or delete
+// anything the Sheet already has. This replaces the old "appState = remote"
+// wholesale overwrite, which could discard a device's own recent offline
+// additions, and (paired with the boot-time retry) could also send a
+// days-stale local blob up as an unconditional overwrite candidate.
+//
+// Every transaction gets an id at creation time (app-core.js stampIds()).
+// For each month within the last 10 days, any local item whose id is
+// missing from the Sheet's copy of that bucket is appended onto the Sheet's
+// data (never the other way around) and, if anything was recovered, pushed
+// back up so the Sheet picks it up.
+function monthKeyForDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function reconcileWithSheet(remote) {
+  const merged = JSON.parse(JSON.stringify(remote));
+  merged.months = merged.months || {};
+
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 10); cutoff.setHours(0,0,0,0);
+  const recentMks = Array.from(new Set([todayMonthKey(), monthKeyForDate(cutoff)]));
+
+  let appended = 0;
+  for (const mk of recentMks) {
+    const localMonth = (appState.months || {})[mk];
+    if (!localMonth) continue;
+    const remoteMonth = merged.months[mk] = { ...emptyMonth(), ...(merged.months[mk] || {}) };
+
+    for (const bucket in localMonth) {
+      const localArr = localMonth[bucket];
+      if (!Array.isArray(localArr)) continue;
+      const remoteArr = Array.isArray(remoteMonth[bucket]) ? remoteMonth[bucket].slice() : [];
+      const remoteIds = new Set(remoteArr.filter(it => it && it.id).map(it => it.id));
+      for (const item of localArr) {
+        if (!item || !item.id || remoteIds.has(item.id)) continue;
+        if (!item.date || new Date(item.date) < cutoff) continue; // outside the recovery window
+        remoteArr.push(item);
+        remoteIds.add(item.id);
+        appended++;
+      }
+      remoteMonth[bucket] = remoteArr;
+    }
+  }
+
+  appState = merged;
+  migrateGroceries();
+  saveLocal();
+  render();
+  renderMenu();
+  if (appended > 0) scheduleSync(); // recovered local-only items — push the merged copy up
+}
+
 async function pullFromSheets() {
   // Local changes waiting to push win over a pull — let the push finish first
   if (pushBusy || pushDirty || syncTimer) return;
@@ -214,7 +266,7 @@ async function pullFromSheets() {
     if (pushBusy || pushDirty || syncTimer) { setSyncState('ok'); return; }
     if (j && j.ok) {
       const remote = JSON.parse(j.data);
-      if (remote && Object.keys(remote.months||{}).length > 0) { appState = remote; migrateGroceries(); saveLocal(); render(); renderMenu(); }
+      if (remote && Object.keys(remote.months||{}).length > 0) reconcileWithSheet(remote);
       setSyncState('ok');
     } else setSyncState('err');
   } catch (e) {

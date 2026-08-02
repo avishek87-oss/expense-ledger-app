@@ -262,9 +262,12 @@ async function boot() {
   document.getElementById('app-ver').textContent = 'v' + APP_VERSION;
   launchStatus('Loading…', 20);
 
-  // A push that failed right before the app last closed — retry it now,
-  // fire-and-forget, so it doesn't block reaching the ledger below.
-  if (IN_GAS && auth && auth.idToken && getPendingSync()) pushToSheets();
+  // A push that failed right before the app last closed is retried below via
+  // pullFromSheets()'s reconcile step, not raw here — sending a possibly
+  // days-stale cached appState straight to the server (as this used to do)
+  // is exactly the vector that let stale local data clobber the Sheet.
+  // reconcileWithSheet() merges any not-yet-synced recent items onto the
+  // Sheet's own data and pushes that instead (see auth-sync.js).
 
   // Confirm this bundle so capgo doesn't roll it back, then hand off the native splash.
   const Updater = getNativePlugin('CapacitorUpdater');

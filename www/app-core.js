@@ -295,7 +295,21 @@ function setBudget(cat, val) {
 function getMD()        { return getMDFor(currentMonth); }
 function getMDFor(mk)   { return { ...emptyMonth(), ...(appState.months[mk] || {}) }; }
 
+// Stamps a stable id onto any transaction-array item that doesn't have one
+// yet, so local-only additions can be identified and merged against the
+// Sheet later instead of a whole-blob replace clobbering divergent data.
+function stampIds(patch) {
+  for (const k in patch) {
+    if (Array.isArray(patch[k])) {
+      patch[k] = patch[k].map(it => (it && typeof it === 'object' && !it.id)
+        ? { ...it, id: Date.now() + '-' + Math.random().toString(36).slice(2) }
+        : it);
+    }
+  }
+  return patch;
+}
 function updateMonth(patch, logMsg) {
+  patch = stampIds(patch);
   pushUndo('Ledger change · ' + monthLabel(currentMonth));
   const next = { ...getMD(), ...patch };
   appState = { ...appState, months: { ...appState.months, [currentMonth]: next } };
@@ -305,6 +319,7 @@ function updateMonth(patch, logMsg) {
   logActivity(logMsg || ('edited ' + monthLabel(currentMonth) + ' ledger'));
 }
 function updateMonthFor(mk, patch, logMsg, silent) {
+  patch = stampIds(patch);
   pushUndo('Ledger change · ' + monthLabel(mk));
   const next = { ...getMDFor(mk), ...patch };
   appState = { ...appState, months: { ...appState.months, [mk]: next } };
