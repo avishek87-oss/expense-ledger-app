@@ -435,11 +435,13 @@ function saveItemEdit() {
   cancelItemEdit();
 }
 
-// Opens the bottom sheet for paying a specific CC billing cycle.
-function openCcPaySheet(cardKey, cycleKey, label, remaining) {
-  pendingCcPay = { cardKey, cycleKey };
-  document.getElementById('cc-pay-title').textContent = label + ' · ₹' + inr(Math.max(0,remaining)) + ' due';
-  document.getElementById('cc-pay-amt').value = Math.max(0, Math.round(remaining));
+// Opens the bottom sheet for paying a card — defaults to the card's total
+// outstanding (all unpaid cycles), not just the one cycle the sheet was
+// opened from, since payments are recorded against the card as a whole.
+function openCcPaySheet(cardKey, label, totalOutstanding) {
+  pendingCcPay = { cardKey };
+  document.getElementById('cc-pay-title').textContent = label + ' · ₹' + inr(Math.max(0,totalOutstanding)) + ' due';
+  document.getElementById('cc-pay-amt').value = Math.max(0, Math.round(totalOutstanding));
   document.getElementById('cc-pay-date').value = today();
   const overlay = document.getElementById('cc-pay-overlay');
   overlay.classList.remove('hidden');
@@ -447,13 +449,16 @@ function openCcPaySheet(cardKey, cycleKey, label, remaining) {
 }
 function confirmCcPay() {
   if (!pendingCcPay) return;
-  const { cardKey, cycleKey } = pendingCcPay;
+  const { cardKey } = pendingCcPay;
   const amt  = Number((document.getElementById('cc-pay-amt')||{}).value);
   const date = (document.getElementById('cc-pay-date')||{}).value || today();
   if (!(amt > 0)) return;
   pendingCcPay = null;
   document.getElementById('cc-pay-overlay').classList.add('hidden');
-  addCcPayment(cardKey, cycleKey, amt, date);
+  // Payments are recorded against the card, not the cycle the sheet happened to
+  // be opened from — ccBuildCycles' pool logic drains outstanding cycles
+  // oldest-first, so an untagged payment always settles the right one(s).
+  addCcPayment(cardKey, null, amt, date);
 }
 function cancelCcPay() {
   pendingCcPay = null;
@@ -501,12 +506,12 @@ function closeCycleReview() {
 }
 function confirmCycleReview() {
   if (!pendingCycleReview) return;
-  const { cardKey, cycleKey, label, total } = pendingCycleReview;
-  // Recalculate cycle total in case items were edited
-  const cyc = ccBuildCycles(cardKey).cycles.find(c => c.key === cycleKey);
-  const finalTotal = cyc ? cyc.total : total;
+  const { cardKey } = pendingCycleReview;
+  // Pay sheet defaults to the card's total outstanding across all cycles, not
+  // just the one being reviewed — recalculated in case items were edited.
+  const cardOutstanding = ccBuildCycles(cardKey).outstanding;
   closeCycleReview();
-  openCcPaySheet(cardKey, cycleKey, label, finalTotal);
+  openCcPaySheet(cardKey, CC_CYCLES[cardKey].label, cardOutstanding);
 }
 function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   const cycleWindow = ccCycleOf(cardKey, cycleKey);
