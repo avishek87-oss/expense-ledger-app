@@ -115,8 +115,18 @@ function pushUndo(label) {
 function undoLastAction() {
   if (!undoStack.length) return;
   const { prevAppState } = undoStack.pop();
+  const prev = appState;
   appState = prevAppState;
-  saveLocal(); render(); renderMenu(); if (IN_GAS) scheduleSync();
+  saveLocal(); render(); renderMenu();
+  // Undo swaps the whole appState reference, so we can't tell which single
+  // field actually differs — mark every top-level synced key plus every
+  // month present on either side dirty. Harmless if a key didn't actually
+  // change (the server-side merge is idempotent), but never misses one.
+  if (IN_GAS) {
+    const keys = new Set(['ccPayments', 'budgets', 'customFixedItems', 'discontinuedFrom', 'trash', 'nehaBank']);
+    Object.keys({ ...(prev.months || {}), ...(appState.months || {}) }).forEach(mk => keys.add('month:' + mk));
+    keys.forEach(k => scheduleSync(k));
+  }
   updateUndoBtn();
 }
 function updateUndoBtn() {
@@ -159,6 +169,7 @@ function getTrash() { return appState.trash || []; }
 function moveToTrash(entry) {
   const id = Date.now() + '-' + Math.random().toString(36).slice(2);
   appState = { ...appState, trash: [...getTrash(), { id, deletedAt: today(), ...entry }] };
+  if (IN_GAS) scheduleSync('trash');
 }
 function pruneTrash() {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
@@ -213,6 +224,7 @@ function restoreFromTrash(id) {
   const entry = getTrash().find(t => t.id === id);
   if (!entry) return;
   appState = { ...appState, trash: getTrash().filter(t => t.id !== id) };
+  if (IN_GAS) scheduleSync('trash');
   if (entry.kind === 'month') {
     const md = getMDFor(entry.mk);
     updateMonthFor(entry.mk, { [entry.cat]: [...(md[entry.cat]||[]), entry.item] });
@@ -241,7 +253,7 @@ function getNehaBank() {
 function saveNehaBank(next, logMsg) {
   pushUndo('Neha Bank change');
   appState = { ...appState, nehaBank: next };
-  saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
+  saveLocal(); renderMenu(); if (IN_GAS) scheduleSync('nehaBank');
   logActivity(logMsg || 'updated Neha Bank');
 }
 function setNehaInitialBalance(val) {
@@ -251,7 +263,8 @@ function addNehaTransfer(direction, amount, date) {
   const amt = Math.round(Number(amount));
   if (!(amt > 0)) return;
   const nb = getNehaBank();
-  saveNehaBank({ ...nb, transfers: [...nb.transfers, { amount:amt, date: date||today(), direction }] },
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2);
+  saveNehaBank({ ...nb, transfers: [...nb.transfers, { id, amount:amt, date: date||today(), direction }] },
     `transferred ₹${amt} (${direction==='in'?'Avishek → Neha':'Neha → Avishek'})`);
 }
 function deleteNehaTransfer(idx) {
@@ -282,7 +295,7 @@ function getBudgets() { return appState.budgets || {}; }
 function saveBudgets(next, logMsg) {
   pushUndo('Budget change');
   appState = { ...appState, budgets: next };
-  saveLocal(); render(); renderMenu(); if (IN_GAS) scheduleSync();
+  saveLocal(); render(); renderMenu(); if (IN_GAS) scheduleSync('budgets');
   logActivity(logMsg || 'updated a budget');
 }
 function setBudget(cat, val) {
@@ -315,7 +328,7 @@ function updateMonth(patch, logMsg) {
   appState = { ...appState, months: { ...appState.months, [currentMonth]: next } };
   saveLocal();
   render();
-  if (IN_GAS) scheduleSync();
+  if (IN_GAS) scheduleSync('month:' + currentMonth);
   logActivity(logMsg || ('edited ' + monthLabel(currentMonth) + ' ledger'));
 }
 function updateMonthFor(mk, patch, logMsg, silent) {
@@ -325,7 +338,7 @@ function updateMonthFor(mk, patch, logMsg, silent) {
   appState = { ...appState, months: { ...appState.months, [mk]: next } };
   saveLocal();
   render();
-  if (IN_GAS) scheduleSync();
+  if (IN_GAS) scheduleSync('month:' + mk);
   if (!silent) logActivity(logMsg || ('edited ' + monthLabel(mk) + ' ledger'));
 }
 
@@ -562,7 +575,7 @@ function customSectionPaid(mk, section) {
 function saveDiscontinued(next, logMsg) {
   pushUndo('Fixed item change');
   appState = { ...appState, discontinuedFrom: next };
-  saveLocal(); render(); if (IN_GAS) scheduleSync();
+  saveLocal(); render(); if (IN_GAS) scheduleSync('discontinuedFrom');
   logActivity(logMsg || 'updated fixed items');
 }
 function discontinueFixedItem(key, label) {
@@ -581,7 +594,7 @@ function restoreDiscontinuedItem(key) {
 function saveCustomFixedItems(next, logMsg) {
   pushUndo('Fixed item change');
   appState = { ...appState, customFixedItems: next };
-  saveLocal(); render(); if (IN_GAS) scheduleSync();
+  saveLocal(); render(); if (IN_GAS) scheduleSync('customFixedItems');
   logActivity(logMsg || 'added a fixed item');
 }
 function openAddFixedItem() {

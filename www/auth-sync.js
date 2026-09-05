@@ -111,11 +111,40 @@ function fetchWithTimeout(url, opts, ms) {
   return fetch(url, { ...(opts || {}), signal: ctrl.signal }).finally(() => clearTimeout(t));
 }
 
-function scheduleSync() {
-  appState.updatedAt = Date.now(); // stamp the edit that triggered this sync
+let dirtyKeys = new Set();
+function scheduleSync(key) {
+  if (key) dirtyKeys.add(key);
   setPendingSync(true);
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => { syncTimer = null; pushToSheets(); }, 1500);
+}
+
+// Reads the current value for one dirty key out of appState, in the shape
+// the server expects to receive it.
+function keyData(key) {
+  if (key.indexOf('month:') === 0) return appState.months[key.slice(6)] || null;
+  if (key === 'ccPayments')       return appState.ccPayments || { axisCC: [], scapiaCC: [] };
+  if (key === 'budgets')          return appState.budgets || {};
+  if (key === 'customFixedItems') return appState.customFixedItems || {};
+  if (key === 'discontinuedFrom') return appState.discontinuedFrom || {};
+  if (key === 'trash')            return appState.trash || [];
+  if (key === 'nehaBank')         return appState.nehaBank || { initialBalance: 0, transfers: [] };
+  return null;
+}
+
+// Adopts the server's per-key merge result into appState. Always safe to
+// apply — the merge is additive, so this can only add data this device
+// didn't have yet, never remove anything.
+function applyMergedBlobs(merged) {
+  for (const key in merged) {
+    let data;
+    try { data = JSON.parse(merged[key]); } catch (e) { continue; }
+    if (key.indexOf('month:') === 0) appState = { ...appState, months: { ...appState.months, [key.slice(6)]: data } };
+    else appState = { ...appState, [key]: data };
+  }
+  saveLocal();
+  render();
+  renderMenu();
 }
 
 // Fire-and-forget activity log entry — appended as a row in a separate Sheet
@@ -150,6 +179,13 @@ async function withAuthRetry(call) {
 async function pushToSheets() {
   if (pushBusy) { pushDirty = true; return; }
   if (!navigator.onLine) { setSyncState('offline'); return; } // safe locally; retried on next save/resume/boot
+  if (dirtyKeys.size === 0) return;
+  const keysToPush = Array.from(dirtyKeys);
+  dirtyKeys = new Set();
+  const ts = Date.now();
+  const blobs = {};
+  keysToPush.forEach(k => { const d = keyData(k); if (d !== null) blobs[k] = { data: JSON.stringify(d), updatedAt: ts }; });
+
   pushBusy = true;
   setSyncState('busy');
   try {
@@ -157,7 +193,7 @@ async function pushToSheets() {
       const res = await fetchWithTimeout(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ idToken: auth.idToken, data: JSON.stringify(appState) }),
+        body: JSON.stringify({ idToken: auth.idToken, blobs }),
       }, 8000);
       return res.json();
     });
@@ -166,33 +202,26 @@ async function pushToSheets() {
       setPendingSync(false);
       consecutivePushFailures = 0;
       syncFailBannerDismissed = false;
-      // Server kept its own newer copy instead of ours (e.g. this push was
-      // a days-stale cached appState retried fire-and-forget at boot, and
-      // Code.gs's saveData() staleness guard rejected it) — adopt the
-      // authoritative copy now instead of waiting for the next pull. Skip
-      // if a newer local edit landed while this request was in flight
-      // (pushDirty) — that edit is already queued for the next push and
-      // must not be reverted by this reconciliation.
-      if (j.accepted === false && j.data && !pushDirty) {
-        try {
-          appState = JSON.parse(j.data);
-          migrateGroceries();
-          saveLocal();
-          render();
-          renderMenu();
-        } catch (e) {}
+      // A newer local edit may have landed on one of these same keys while
+      // this request was in flight (pushDirty) — that edit is already
+      // queued for the next push and must not be reverted by adopting an
+      // older merge result now.
+      if (j.merged && !pushDirty) {
+        try { applyMergedBlobs(j.merged); } catch (e) {}
       }
     } else {
+      keysToPush.forEach(k => dirtyKeys.add(k)); // retry on next schedule
       consecutivePushFailures++;
     }
     updateSyncFailBanner();
   } catch (e) {
+    keysToPush.forEach(k => dirtyKeys.add(k));
     setSyncState('err'); // offline or GAS unreachable — data is safe locally
     consecutivePushFailures++;
     updateSyncFailBanner();
   }
   pushBusy = false;
-  if (pushDirty) { pushDirty = false; scheduleSync(); }
+  if (pushDirty || dirtyKeys.size > 0) { pushDirty = false; scheduleSync(); }
 }
 
 // The Sheet is always authoritative. Local state may only ever contribute
@@ -218,6 +247,7 @@ function reconcileWithSheet(remote) {
   const recentMks = Array.from(new Set([todayMonthKey(), monthKeyForDate(cutoff)]));
 
   let appended = 0;
+  const touchedMks = new Set();
   for (const mk of recentMks) {
     const localMonth = (appState.months || {})[mk];
     if (!localMonth) continue;
@@ -234,6 +264,7 @@ function reconcileWithSheet(remote) {
         remoteArr.push(item);
         remoteIds.add(item.id);
         appended++;
+        touchedMks.add(mk);
       }
       remoteMonth[bucket] = remoteArr;
     }
@@ -244,7 +275,8 @@ function reconcileWithSheet(remote) {
   saveLocal();
   render();
   renderMenu();
-  if (appended > 0) scheduleSync(); // recovered local-only items — push the merged copy up
+  // Recovered local-only items — push each affected month's merged copy up.
+  if (appended > 0 && IN_GAS) touchedMks.forEach(mk => scheduleSync('month:' + mk));
 }
 
 async function pullFromSheets() {

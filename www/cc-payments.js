@@ -381,7 +381,8 @@ function applyItemPatch(cat, idx, patch, newDate, logMsg) {
   appState = { ...appState, months: { ...appState.months,
     [fromMk]: { ...fmd, [cat]: (fmd[cat]||[]).filter((_,i)=>i!==idx) },
     [toMk]:   { ...tmd, [cat]: [...(tmd[cat]||[]), patch] } } };
-  saveLocal(); render(); if (IN_GAS) scheduleSync();
+  saveLocal(); render();
+  if (IN_GAS) { scheduleSync('month:' + fromMk); scheduleSync('month:' + toMk); }
   logActivity(logMsg || 'edited item');
 }
 function saveItemEdit() {
@@ -793,7 +794,7 @@ function ccBuildCycles(cardKey) {
 function saveCcPayments(next, logMsg) {
   pushUndo('Credit card payment change');
   appState = { ...appState, ccPayments: next };
-  saveLocal(); renderMenu(); if (IN_GAS) scheduleSync();
+  saveLocal(); renderMenu(); if (IN_GAS) scheduleSync('ccPayments');
   logActivity(logMsg || 'updated a CC payment');
 }
 function addCcPayment(cardKey, cycleKey, amount, date) {
