@@ -132,9 +132,11 @@ function keyData(key) {
   return null;
 }
 
-// Adopts the server's per-key merge result into appState. Always safe to
-// apply — the merge is additive, so this can only add data this device
-// didn't have yet, never remove anything.
+// Adopts the server's per-key merge result into appState. The merge is a
+// union with this device's just-pushed copy winning on any id collision, plus
+// trash-tombstone removals, so adopting it can add data this device didn't
+// have yet and can drop items this device just deleted — it can never revert
+// this device's own edits.
 function applyMergedBlobs(merged) {
   for (const key in merged) {
     let data;
@@ -142,6 +144,10 @@ function applyMergedBlobs(merged) {
     if (key.indexOf('month:') === 0) appState = { ...appState, months: { ...appState.months, [key.slice(6)]: data } };
     else appState = { ...appState, [key]: data };
   }
+  // A phone still on the old bundle can push a legacy `groceries` array up;
+  // the merge hands it straight back here, so migrate it exactly like
+  // reconcileWithSheet() does — otherwise those rows render as nothing.
+  migrateGroceries();
   saveLocal();
   render();
   renderMenu();
@@ -176,6 +182,11 @@ async function withAuthRetry(call) {
   return j;
 }
 
+// DEPLOY ORDER MATTERS: this `blobs`-shaped POST is rejected by an old
+// Code.gs with {ok:false, error:'missing data'} — sync stays broken until the
+// Apps Script is redeployed. Always redeploy Code.gs BEFORE releasing a
+// bundle containing this file. (The other direction is safe: an old phone's
+// whole-blob POST is handled by the new script's saveLegacyBlob().)
 async function pushToSheets() {
   if (pushBusy) { pushDirty = true; return; }
   if (!navigator.onLine) { setSyncState('offline'); return; } // safe locally; retried on next save/resume/boot
