@@ -165,15 +165,26 @@ function ensureAppDataTable(sheet) {
   const b1 = sheet.getRange('B1').getValue();
   if (a1 === 'key' && b1 === 'data') return; // already migrated
 
+  // A1 holds the pre-migration whole-blob JSON. If it is present but does NOT
+  // parse into a plausible legacy state (truncated at the 50,000-char cell
+  // ceiling, corrupted, or something else entirely) we must NOT treat it as
+  // "no data" and wipe the sheet — that would destroy the only copy. Keep the
+  // raw string verbatim in a `legacy:backup` row so a human can recover it,
+  // and migrate as if the sheet had been empty.
   let legacy = {};
+  let backup = null;
   if (a1 && typeof a1 === 'string') {
-    try { legacy = JSON.parse(a1) || {}; } catch (e) { legacy = {}; }
+    let parsed = null;
+    try { parsed = JSON.parse(a1); } catch (e) { parsed = null; }
+    if (parsed && typeof parsed === 'object' && parsed.months && typeof parsed.months === 'object') legacy = parsed;
+    else backup = a1;
   }
   sheet.clear();
   sheet.getRange(1, 1, 1, 3).setValues([['key', 'data', 'updatedAt']]);
 
   const ts = Number(legacy.updatedAt) || Date.now();
   const rows = [];
+  if (backup !== null) rows.push(['legacy:backup', backup, Date.now()]);
   const months = legacy.months || {};
   Object.keys(months).forEach(function (mk) { rows.push(['month:' + mk, JSON.stringify(months[mk]), ts]); });
   rows.push(['ccPayments', JSON.stringify(legacy.ccPayments || {}), ts]);
@@ -231,16 +242,36 @@ function saveBlobs(sheet, blobs) {
   const rows = readAllRows(sheet);
   const merged = {};
   const updates = [];
-  Object.keys(blobs).forEach(function (key) {
+
+  function mergeOne(key) {
     let incoming;
-    try { incoming = JSON.parse(blobs[key].data); } catch (e) { return; }
+    try { incoming = JSON.parse(blobs[key].data); } catch (e) { return null; }
     const incomingTs = Number(blobs[key].updatedAt) || Date.now();
     const existingRow = rows[key];
     const existingVal = existingRow && existingRow.data !== null ? existingRow.data : keyDefault(key);
-    const mergedVal = mergeKey(key, existingVal, incoming);
-    const ts = Math.max(incomingTs, existingRow ? existingRow.updatedAt : 0);
-    updates.push({ key: key, data: JSON.stringify(mergedVal), updatedAt: ts });
-    merged[key] = JSON.stringify(mergedVal);
+    return {
+      incoming: incoming,
+      value: mergeKey(key, existingVal, incoming),
+      ts: Math.max(incomingTs, existingRow ? existingRow.updatedAt : 0),
+    };
+  }
+
+  // `trash` is merged first: its ids are deletion tombstones that have to be
+  // applied to every other key merged in this same batch.
+  const trashInBatch = Object.prototype.hasOwnProperty.call(blobs, 'trash');
+  const trashResult = trashInBatch ? mergeOne('trash') : null;
+  const trashValue = trashResult ? trashResult.value
+    : (rows.trash && rows.trash.data !== null ? rows.trash.data : []);
+  const trashedIds = trashedIdSet(trashValue);
+
+  Object.keys(blobs).forEach(function (key) {
+    const res = key === 'trash' ? trashResult : mergeOne(key);
+    if (!res) return;
+    const value = key === 'trash'
+      ? res.value
+      : stripTrashedIds(res.value, trashedIds, collectIds(res.incoming));
+    updates.push({ key: key, data: JSON.stringify(value), updatedAt: res.ts });
+    merged[key] = JSON.stringify(value);
   });
   writeRows(sheet, updates);
   return { merged: merged };
@@ -268,28 +299,46 @@ function saveLegacyBlob(sheet, jsonStr) {
 // This means no save can ever discard another save's data, and a new field
 // added later needs no special-case merge code — it falls out of this
 // uniform rule automatically.
-function unionArray(a, b) {
+// Identity of an array entry for union purposes: a stable id when the item has
+// one, otherwise its exact content/value (legacy id-less rows, date strings).
+function itemKey(it) {
+  if (it && typeof it === 'object') return it.id ? 'id:' + it.id : 'json:' + JSON.stringify(it);
+  return 'val:' + it;
+}
+
+// True union, with a DEFINED winner on overlap: when both sides carry an entry
+// with the same id, the INCOMING (just-pushed) copy wins. That's what makes an
+// in-place edit — ticking an item paid, changing an amount — actually stick
+// instead of being reverted to the server's stale copy on the way back.
+// Entries only one side has are kept from whichever side has them, and the
+// existing side's ordering is preserved (incoming-only entries append).
+function unionArray(existing, incoming) {
   var out = [];
-  var seenIds = {};
-  var seenOther = {};
-  [].concat(a || [], b || []).forEach(function (it) {
-    if (it && typeof it === 'object') {
-      if (it.id) {
-        if (seenIds[it.id]) return;
-        seenIds[it.id] = true;
-      } else {
-        var k = JSON.stringify(it);
-        if (seenOther[k]) return;
-        seenOther[k] = true;
-      }
-    } else {
-      if (seenOther[it]) return;
-      seenOther[it] = true;
-    }
+  var seen = {};
+  var incomingByKey = {};
+  (incoming || []).forEach(function (it) { incomingByKey[itemKey(it)] = it; });
+  (existing || []).forEach(function (it) {
+    var k = itemKey(it);
+    if (seen[k]) return;
+    seen[k] = true;
+    out.push(Object.prototype.hasOwnProperty.call(incomingByKey, k) ? incomingByKey[k] : it);
+  });
+  (incoming || []).forEach(function (it) {
+    var k = itemKey(it);
+    if (seen[k]) return;
+    seen[k] = true;
     out.push(it);
   });
   return out;
 }
+
+// Plain-string presence lists (attendance dates) carry no id, so a union by
+// value can never express "this date was removed" — the stale server copy
+// would silently put it back. For these specific fields the incoming array
+// wins wholesale (falling back to the existing one only if the push omitted
+// the field entirely), exactly like a scalar. Every OTHER array field still
+// gets true union + tombstone semantics.
+var WHOLESALE_REPLACE_ARRAY_KEYS = { chessDates: true, skatingDates: true };
 
 function mergeObjectAdditive(existing, incoming) {
   var out = Object.assign({}, existing || {}, incoming || {});
@@ -298,6 +347,7 @@ function mergeObjectAdditive(existing, incoming) {
   Object.keys(incoming || {}).forEach(function (k) { keys[k] = true; });
   Object.keys(keys).forEach(function (k) {
     var ev = (existing || {})[k], iv = (incoming || {})[k];
+    if (WHOLESALE_REPLACE_ARRAY_KEYS[k]) { out[k] = iv !== undefined ? iv : ev; return; }
     if (Array.isArray(ev) || Array.isArray(iv)) out[k] = unionArray(ev, iv);
   });
   return out;
@@ -308,39 +358,61 @@ function mergeKey(key, existing, incoming) {
   return mergeObjectAdditive(existing, incoming);
 }
 
-// ── One-time backfill: run manually from the Apps Script editor after this
-// file ships, so every existing transaction gets a stable id (new
-// transactions get one from the client automatically). Idempotent — safe
-// to re-run; only items missing an id are touched.
-function backfillTransactionIds() {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(APPDATA_SHEET);
-  if (!sheet) { Logger.log('backfillTransactionIds: no AppData sheet found'); return; }
-
-  const raw = sheet.getRange('A1').getValue();
-  if (!raw) { Logger.log('backfillTransactionIds: AppData!A1 is empty'); return; }
-
-  const state = JSON.parse(raw);
-  let stamped = 0;
-  const months = state.months || {};
-  for (const mk in months) {
-    const month = months[mk];
-    for (const bucket in month) {
-      const arr = month[bucket];
-      if (!Array.isArray(arr)) continue;
-      month[bucket] = arr.map(function (it) {
-        if (it && typeof it === 'object' && !it.id) {
-          stamped++;
-          return Object.assign({ id: Utilities.getUuid() }, it);
-        }
-        return it;
-      });
-    }
-  }
-
-  sheet.getRange('A1').setValue(JSON.stringify(state));
-  Logger.log('backfillTransactionIds: stamped ' + stamped + ' transactions');
+// ── Deletion tombstones ────────────────────────────────────────────────────
+// A union can add but never remove, so deletions ride along as tombstones in
+// the `trash` key: every trash entry wraps the deleted item ({kind, mk?, cat?,
+// cardKey?, item}), and `item.id` is the id that must disappear from the other
+// keys pushed in the same batch. The client guarantees they arrive together —
+// every delete calls moveToTrash() and then its own save*(), both marking
+// their keys dirty before the 1.5s debounce fires.
+function trashedIdSet(trashArr) {
+  var ids = {};
+  (trashArr || []).forEach(function (t) {
+    if (t && t.item && t.item.id) ids[t.item.id] = true;
+  });
+  return ids;
 }
+
+// Ids the pushing client still has for this key. A tombstone never removes an
+// entry the client itself just pushed — that's what makes "restore from trash"
+// work (the restore pushes the item back while its tombstone may still be in
+// the server's copy of `trash`). A tombstone only ever drops an entry that
+// exists on the server side alone.
+function collectIds(value, into) {
+  var ids = into || {};
+  if (!value || typeof value !== 'object') return ids;
+  if (Array.isArray(value)) {
+    value.forEach(function (it) { if (it && typeof it === 'object' && it.id) ids[it.id] = true; });
+    return ids;
+  }
+  Object.keys(value).forEach(function (k) { if (Array.isArray(value[k])) collectIds(value[k], ids); });
+  return ids;
+}
+
+// Drops trashed ids from every id-bearing array one level inside `value`
+// (month buckets, ccPayments per card, nehaBank.transfers).
+function stripTrashedIds(value, trashedIds, keepIds) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  var out = value;
+  Object.keys(value).forEach(function (k) {
+    var arr = value[k];
+    if (!Array.isArray(arr)) return;
+    var kept = arr.filter(function (it) {
+      if (!it || typeof it !== 'object' || !it.id) return true;
+      return !trashedIds[it.id] || keepIds[it.id];
+    });
+    if (kept.length === arr.length) return;
+    if (out === value) out = Object.assign({}, value);
+    out[k] = kept;
+  });
+  return out;
+}
+
+// NOTE: the old one-click `backfillTransactionIds()` helper was removed. It
+// assumed AppData!A1 was a whole-state JSON blob; post-migration A1 is the
+// table's `key` header cell, so running it would corrupt the header and make
+// ensureAppDataTable() re-migrate (and clear) the live table. Transaction ids
+// are stamped client-side now — see stampIds() in www/app-core.js.
 
 // ── Human-readable Monthly View ────────────────────────────────────────────
 function writeMonthlyView(state) {
@@ -524,11 +596,12 @@ function writeCcPaymentsSection(sheet, state, r) {
   const keys = Object.keys(cc).filter(function (k) { return (cc[k] || []).length; });
   if (!keys.length) return r;
 
-  sheet.getRange(r, 1, 1, 4).merge().setValue('Credit Card Payments')
+  // 5 columns, matching sectionLbl() and every other row in writeMonthlyView.
+  sheet.getRange(r, 1, 1, 5).merge().setValue('Credit Card Payments')
     .setFontSize(12).setFontWeight('bold').setBackground('#d9d2c0').setFontColor('#1f2a24');
   r++;
-  ['Card', 'Date', 'Amount (₹)', 'Cycle'].forEach(function (h, i) { sheet.getRange(r, i + 1).setValue(h); });
-  sheet.getRange(r, 1, 1, 4).setFontWeight('bold').setBackground('#f7f4ec');
+  ['Card', 'Date', 'Amount (₹)', 'Cycle', ''].forEach(function (h, i) { sheet.getRange(r, i + 1).setValue(h); });
+  sheet.getRange(r, 1, 1, 5).setFontWeight('bold').setBackground('#f7f4ec');
   r++;
 
   keys.forEach(function (cardKey) {
@@ -545,11 +618,21 @@ function writeCcPaymentsSection(sheet, state, r) {
 }
 
 // ── Calc helpers (mirrors ledger.html exactly) ─────────────────────────────
+// Dates are stored as plain 'YYYY-MM-DD' strings. Parse the components
+// directly — round-tripping through `new Date(iso)` reads back as UTC
+// midnight and then renders in the script's own timezone, which shifts every
+// date by a day for any project not on UTC.
 function fmtDMYSheet(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return String(iso);
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const s = String(iso);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const mo = Number(m[2]);
+    if (mo >= 1 && mo <= 12) return m[3] + '-' + MONTHS[mo - 1] + '-' + m[1];
+  }
+  const d = new Date(s);
+  if (isNaN(d)) return s;
   return String(d.getDate()).padStart(2, '0') + '-' + MONTHS[d.getMonth()] + '-' + d.getFullYear();
 }
 function daysInMonth(mk) { const [y,m]=mk.split('-').map(Number); return new Date(y,m,0).getDate(); }
