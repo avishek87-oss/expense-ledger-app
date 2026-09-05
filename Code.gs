@@ -249,6 +249,54 @@ function mergeCcPayments(existing, incoming) {
   return out;
 }
 
+// ── Additive merge (per-key, replaces the old whole-blob stale/reject guard) ─
+// Every field merges additively: array-valued data is unioned by id (or by
+// exact value/content when no id exists, e.g. legacy entries or plain date
+// lists); every other key takes whichever side is currently being pushed,
+// falling back to the existing side only if the incoming side omitted it.
+// This means no save can ever discard another save's data, and a new field
+// added later needs no special-case merge code — it falls out of this
+// uniform rule automatically.
+function unionArray(a, b) {
+  var out = [];
+  var seenIds = {};
+  var seenOther = {};
+  [].concat(a || [], b || []).forEach(function (it) {
+    if (it && typeof it === 'object') {
+      if (it.id) {
+        if (seenIds[it.id]) return;
+        seenIds[it.id] = true;
+      } else {
+        var k = JSON.stringify(it);
+        if (seenOther[k]) return;
+        seenOther[k] = true;
+      }
+    } else {
+      if (seenOther[it]) return;
+      seenOther[it] = true;
+    }
+    out.push(it);
+  });
+  return out;
+}
+
+function mergeObjectAdditive(existing, incoming) {
+  var out = Object.assign({}, existing || {}, incoming || {});
+  var keys = {};
+  Object.keys(existing || {}).forEach(function (k) { keys[k] = true; });
+  Object.keys(incoming || {}).forEach(function (k) { keys[k] = true; });
+  Object.keys(keys).forEach(function (k) {
+    var ev = (existing || {})[k], iv = (incoming || {})[k];
+    if (Array.isArray(ev) || Array.isArray(iv)) out[k] = unionArray(ev, iv);
+  });
+  return out;
+}
+
+function mergeKey(key, existing, incoming) {
+  if (key === 'trash') return unionArray(existing, incoming);
+  return mergeObjectAdditive(existing, incoming);
+}
+
 // Removes duplicate transaction ids within each month/bucket array
 // (first occurrence wins). Mutates state in place.
 function dedupeTransactionIds(state) {
