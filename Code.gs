@@ -55,10 +55,11 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.op === 'getLog') {
     return jsonOut({ ok:true, entries: getActivityLog(e.parameter.since, e.parameter.limit) });
   }
-  return jsonOut({ ok:true, data:getData() });
+  return jsonOut({ ok:true, data: JSON.stringify(getFullState(getAppDataSheet())) });
 }
 
-// POST body: {"idToken":"...","data":"<json blob string>"}       → { ok:true }
+// POST body: {"idToken":"...","blobs":{"<key>":{"data":"<json>","updatedAt":<ms>}, ...}} → { ok:true, merged:{...} }
+// POST body: {"idToken":"...","data":"<json blob string>"}       → { ok:true, merged:{...} }  (legacy whole-blob shape)
 // POST body: {"idToken":"...","op":"log","entry":"<one line>"}   → { ok:true }
 function doPost(e) {
   let body;
@@ -74,25 +75,29 @@ function doPost(e) {
     return jsonOut({ ok:true });
   }
 
-  if (typeof body.data !== 'string') return jsonOut({ ok:false, error:'missing data' });
+  const hasBlobs = body.blobs && typeof body.blobs === 'object';
+  const hasLegacyData = typeof body.data === 'string';
+  if (!hasBlobs && !hasLegacyData) return jsonOut({ ok:false, error:'missing data' });
 
-  // Reject obviously invalid payloads before overwriting the sheet
-  try {
-    const parsed = JSON.parse(body.data);
-    if (!parsed || typeof parsed.months !== 'object') throw new Error('bad shape');
-  } catch (err) { return jsonOut({ ok:false, error:'invalid data json' }); }
+  if (hasLegacyData) {
+    // Reject obviously invalid payloads before overwriting the sheet
+    try {
+      const parsed = JSON.parse(body.data);
+      if (!parsed || typeof parsed.months !== 'object') throw new Error('bad shape');
+    } catch (err) { return jsonOut({ ok:false, error:'invalid data json' }); }
+  }
 
+  const sheet = getAppDataSheet();
   const lock = LockService.getScriptLock();
   lock.waitLock(10000); // serialize concurrent saves from multiple phones
   let result;
   try {
-    result = saveData(body.data);
+    result = hasBlobs ? saveBlobs(sheet, body.blobs) : saveLegacyBlob(sheet, body.data);
+    try { writeMonthlyView(getFullState(sheet)); } catch (e) { Logger.log('view error: ' + e); }
   } finally {
     lock.releaseLock();
   }
-  return result.stale
-    ? jsonOut({ ok:true, accepted:false, data: JSON.stringify(result.state) })
-    : jsonOut({ ok:true, accepted:true });
+  return jsonOut({ ok:true, merged: result.merged });
 }
 
 // ── Activity log (separate Sheet tab — never touches the AppData JSON blob) ─
@@ -301,26 +306,6 @@ function mergeObjectAdditive(existing, incoming) {
 function mergeKey(key, existing, incoming) {
   if (key === 'trash') return unionArray(existing, incoming);
   return mergeObjectAdditive(existing, incoming);
-}
-
-// Removes duplicate transaction ids within each month/bucket array
-// (first occurrence wins). Mutates state in place.
-function dedupeTransactionIds(state) {
-  const months = state.months || {};
-  for (const mk in months) {
-    const month = months[mk];
-    for (const bucket in month) {
-      const arr = month[bucket];
-      if (!Array.isArray(arr)) continue;
-      const seen = {};
-      month[bucket] = arr.filter(function (it) {
-        if (!it || !it.id) return true; // no id (e.g. plain-string date lists) — keep as-is
-        if (seen[it.id]) return false;
-        seen[it.id] = true;
-        return true;
-      });
-    }
-  }
 }
 
 // ── One-time backfill: run manually from the Apps Script editor after this
