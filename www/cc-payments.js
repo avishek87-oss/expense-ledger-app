@@ -800,7 +800,8 @@ function addCcPayment(cardKey, cycleKey, amount, date) {
   const amt = Math.round(Number(amount));
   if (!(amt > 0)) return;
   const cur = getCcPayments();
-  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { amount:amt, date: date||today(), cycleKey }] },
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2);
+  saveCcPayments({ ...cur, [cardKey]: [...cur[cardKey], { id, amount:amt, date: date||today(), cycleKey }] },
     `paid ₹${amt} on ${CC_CYCLES[cardKey]?.label || cardKey}`);
 }
 function deleteCcPayment(cardKey, idx) {

@@ -192,6 +192,7 @@ function saveData(jsonStr) {
       const existing = JSON.parse(existingRaw);
       const mergedCustomFixedItems = { ...(existing.customFixedItems || {}), ...(incoming.customFixedItems || {}) };
       const mergedDiscontinuedFrom = { ...(existing.discontinuedFrom || {}), ...(incoming.discontinuedFrom || {}) };
+      const mergedCcPayments = mergeCcPayments(existing.ccPayments, incoming.ccPayments);
 
       const incomingTs = Number(incoming.updatedAt) || 0;
       const existingTs = Number(existing.updatedAt) || 0;
@@ -200,6 +201,7 @@ function saveData(jsonStr) {
       finalState = stale ? existing : incoming;
       finalState.customFixedItems = mergedCustomFixedItems;
       finalState.discontinuedFrom = mergedDiscontinuedFrom;
+      finalState.ccPayments = mergedCcPayments;
       if (stale) Logger.log('saveData: rejected stale push (incoming=' + incomingTs + ' < existing=' + existingTs + '); kept existing state');
 
       // Defense in depth: the client's per-transaction reconciliation
@@ -214,6 +216,37 @@ function saveData(jsonStr) {
 
   try { writeMonthlyView(finalState); } catch(e) { Logger.log('view error: '+e); }
   return { stale: stale, state: finalState };
+}
+
+// CC payments are a top-level, cross-month array-per-card (not part of
+// `months`), so the whole-blob stale/overwrite logic above used to drop
+// whichever side lost outright — a payment recorded on a device whose push
+// got flagged stale (or that simply lost a same-second race) was discarded
+// for good the moment the client adopted the response as authoritative.
+// Union both sides by id (like customFixedItems/discontinuedFrom above);
+// legacy payments predating id-stamping are deduped by content instead.
+function mergeCcPayments(existing, incoming) {
+  const out = {};
+  const cardKeys = new Set([...Object.keys(existing || {}), ...Object.keys(incoming || {})]);
+  cardKeys.forEach(function (cardKey) {
+    const merged = [];
+    const seenIds = {};
+    const seenLegacy = {};
+    [].concat((existing || {})[cardKey] || [], (incoming || {})[cardKey] || []).forEach(function (p) {
+      if (!p) return;
+      if (p.id) {
+        if (seenIds[p.id]) return;
+        seenIds[p.id] = true;
+      } else {
+        const legacyKey = p.amount + '|' + p.date + '|' + (p.cycleKey || '');
+        if (seenLegacy[legacyKey]) return;
+        seenLegacy[legacyKey] = true;
+      }
+      merged.push(p);
+    });
+    out[cardKey] = merged;
+  });
+  return out;
 }
 
 // Removes duplicate transaction ids within each month/bucket array
