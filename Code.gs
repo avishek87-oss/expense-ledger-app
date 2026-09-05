@@ -126,11 +126,9 @@ function getActivityLog(since, limit) {
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  if (!ss.getSheetByName(APPDATA_SHEET)) {
-    ss.insertSheet(APPDATA_SHEET).hideSheet();
-  } else {
-    ss.getSheetByName(APPDATA_SHEET).hideSheet();
-  }
+  const appDataSheet = ss.getSheetByName(APPDATA_SHEET) || ss.insertSheet(APPDATA_SHEET);
+  appDataSheet.hideSheet();
+  ensureAppDataTable(appDataSheet);
 
   if (!ss.getSheetByName(MONTHLY_SHEET)) {
     ss.insertSheet(MONTHLY_SHEET, 0);
@@ -145,108 +143,116 @@ function setupSheets() {
   Logger.log('Done. Now deploy as Web App (Execute as: Me, Access: Anyone) and copy the /exec URL.');
 }
 
-// ── Called from the browser via google.script.run ─────────────────────────
-function getData() {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  let   sheet = ss.getSheetByName(APPDATA_SHEET);
+// ── AppData storage: one row per key (key | data | updatedAt) ──────────────
+// Auto-migrates the old single-cell whole-blob format the first time this
+// runs against a sheet that hasn't been converted yet, so it doesn't matter
+// whether the Sheet script or the phone app updates first during rollout.
+function getAppDataSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(APPDATA_SHEET);
   if (!sheet) { sheet = ss.insertSheet(APPDATA_SHEET); sheet.hideSheet(); }
-  return sheet.getRange('A1').getValue() || '{"months":{}}';
+  ensureAppDataTable(sheet);
+  return sheet;
 }
 
-// Every phone pushes its ENTIRE in-memory state on every save. If phone A
-// adds a custom fixed item and pushes, then phone B — still holding a copy
-// from before that add — saves anything else, phone B's push blindly
-// overwrites the whole sheet and silently erases A's addition (this is
-// exactly how a fixed item added on one phone stopped showing up on the
-// other: nothing failed, it just got clobbered by an unrelated later save).
-// customFixedItems and discontinuedFrom are both write-once, keyed-by-id
-// maps — items are only ever added or flagged discontinued, never mutated
-// in place — so it's safe to union them with the existing sheet contents
-// instead of overwriting, closing this race for this feature. The caller
-// already holds the script lock for the duration of this call, so there's
-// no separate race on the merge read+write itself. (Other fields, like the
-// misc-expense arrays, don't have stable ids and aren't merged here — that
-// would need a broader change if it becomes a problem in practice.)
-//
-// updatedAt staleness guard: a push whose updatedAt predates the currently
-// stored state must not clobber months/budgets/trash/etc with old data —
-// this is exactly the boot-time race where a days-stale cached appState
-// gets retried fire-and-forget before that phone's own fresh pull lands
-// (see boot.js's pending-sync retry). Missing updatedAt (data saved before
-// this field existed, or a not-yet-updated client mid-rollout) is treated
-// as timestamp 0 — it never beats real data, but also never blocks the
-// very first push after this ships (existing.updatedAt is also 0 then, and
-// 0 < 0 is false, so incoming is accepted — matching prior behavior).
-function saveData(jsonStr) {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  let   sheet = ss.getSheetByName(APPDATA_SHEET);
-  if (!sheet) { sheet = ss.insertSheet(APPDATA_SHEET); sheet.hideSheet(); }
+function ensureAppDataTable(sheet) {
+  const a1 = sheet.getRange('A1').getValue();
+  const b1 = sheet.getRange('B1').getValue();
+  if (a1 === 'key' && b1 === 'data') return; // already migrated
 
-  const incoming = JSON.parse(jsonStr);
-  const existingRaw = sheet.getRange('A1').getValue();
-  let finalState = incoming;
-  let stale = false;
-
-  if (existingRaw) {
-    try {
-      const existing = JSON.parse(existingRaw);
-      const mergedCustomFixedItems = { ...(existing.customFixedItems || {}), ...(incoming.customFixedItems || {}) };
-      const mergedDiscontinuedFrom = { ...(existing.discontinuedFrom || {}), ...(incoming.discontinuedFrom || {}) };
-      const mergedCcPayments = mergeCcPayments(existing.ccPayments, incoming.ccPayments);
-
-      const incomingTs = Number(incoming.updatedAt) || 0;
-      const existingTs = Number(existing.updatedAt) || 0;
-      stale = incomingTs < existingTs;
-
-      finalState = stale ? existing : incoming;
-      finalState.customFixedItems = mergedCustomFixedItems;
-      finalState.discontinuedFrom = mergedDiscontinuedFrom;
-      finalState.ccPayments = mergedCcPayments;
-      if (stale) Logger.log('saveData: rejected stale push (incoming=' + incomingTs + ' < existing=' + existingTs + '); kept existing state');
-
-      // Defense in depth: the client's per-transaction reconciliation
-      // (auth-sync.js reconcileWithSheet) already merges additively against
-      // the Sheet before pushing, but dedupe by id here too in case two
-      // devices race to recover/push the same item.
-      dedupeTransactionIds(finalState);
-    } catch (e) { Logger.log('merge error: ' + e); }
+  let legacy = {};
+  if (a1 && typeof a1 === 'string') {
+    try { legacy = JSON.parse(a1) || {}; } catch (e) { legacy = {}; }
   }
+  sheet.clear();
+  sheet.getRange(1, 1, 1, 3).setValues([['key', 'data', 'updatedAt']]);
 
-  sheet.getRange('A1').setValue(JSON.stringify(finalState));
-
-  try { writeMonthlyView(finalState); } catch(e) { Logger.log('view error: '+e); }
-  return { stale: stale, state: finalState };
+  const ts = Number(legacy.updatedAt) || Date.now();
+  const rows = [];
+  const months = legacy.months || {};
+  Object.keys(months).forEach(function (mk) { rows.push(['month:' + mk, JSON.stringify(months[mk]), ts]); });
+  rows.push(['ccPayments', JSON.stringify(legacy.ccPayments || {}), ts]);
+  rows.push(['budgets', JSON.stringify(legacy.budgets || {}), ts]);
+  rows.push(['customFixedItems', JSON.stringify(legacy.customFixedItems || {}), ts]);
+  rows.push(['discontinuedFrom', JSON.stringify(legacy.discontinuedFrom || {}), ts]);
+  rows.push(['trash', JSON.stringify(legacy.trash || []), ts]);
+  rows.push(['nehaBank', JSON.stringify(legacy.nehaBank || { initialBalance: 0, transfers: [] }), ts]);
+  if (rows.length) sheet.getRange(2, 1, rows.length, 3).setValues(rows);
 }
 
-// CC payments are a top-level, cross-month array-per-card (not part of
-// `months`), so the whole-blob stale/overwrite logic above used to drop
-// whichever side lost outright — a payment recorded on a device whose push
-// got flagged stale (or that simply lost a same-second race) was discarded
-// for good the moment the client adopted the response as authoritative.
-// Union both sides by id (like customFixedItems/discontinuedFrom above);
-// legacy payments predating id-stamping are deduped by content instead.
-function mergeCcPayments(existing, incoming) {
+function readAllRows(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return {};
+  const vals = sheet.getRange(2, 1, last - 1, 3).getValues();
   const out = {};
-  const cardKeys = new Set([...Object.keys(existing || {}), ...Object.keys(incoming || {})]);
-  cardKeys.forEach(function (cardKey) {
-    const merged = [];
-    const seenIds = {};
-    const seenLegacy = {};
-    [].concat((existing || {})[cardKey] || [], (incoming || {})[cardKey] || []).forEach(function (p) {
-      if (!p) return;
-      if (p.id) {
-        if (seenIds[p.id]) return;
-        seenIds[p.id] = true;
-      } else {
-        const legacyKey = p.amount + '|' + p.date + '|' + (p.cycleKey || '');
-        if (seenLegacy[legacyKey]) return;
-        seenLegacy[legacyKey] = true;
-      }
-      merged.push(p);
-    });
-    out[cardKey] = merged;
+  vals.forEach(function (row, i) {
+    const key = row[0];
+    if (!key) return;
+    let data;
+    try { data = JSON.parse(row[1]); } catch (e) { data = null; }
+    out[key] = { data: data, updatedAt: Number(row[2]) || 0, rowIndex: i + 2 };
   });
   return out;
+}
+
+function writeRows(sheet, updates) {
+  const rows = readAllRows(sheet);
+  let nextRow = sheet.getLastRow() + 1;
+  updates.forEach(function (u) {
+    const existing = rows[u.key];
+    const targetRow = existing ? existing.rowIndex : nextRow++;
+    sheet.getRange(targetRow, 1, 1, 3).setValues([[u.key, u.data, u.updatedAt]]);
+  });
+}
+
+function keyDefault(key) { return key === 'trash' ? [] : {}; }
+
+function getFullState(sheet) {
+  const rows = readAllRows(sheet);
+  const state = { months: {}, ccPayments: {}, budgets: {}, customFixedItems: {}, discontinuedFrom: {}, trash: [], nehaBank: { initialBalance: 0, transfers: [] } };
+  Object.keys(rows).forEach(function (key) {
+    const val = rows[key].data === null ? keyDefault(key) : rows[key].data;
+    if (key.indexOf('month:') === 0) state.months[key.slice(6)] = val;
+    else if (key in state) state[key] = val;
+  });
+  return state;
+}
+
+// Merges every key in `blobs` ({ key: { data: <json string>, updatedAt } })
+// against the sheet's current value for that key, writes the merged result
+// back, and returns { merged: { key: <merged-json-string> } } for every key
+// so the caller can adopt the merge outcome — never a whole-state replace.
+function saveBlobs(sheet, blobs) {
+  const rows = readAllRows(sheet);
+  const merged = {};
+  const updates = [];
+  Object.keys(blobs).forEach(function (key) {
+    let incoming;
+    try { incoming = JSON.parse(blobs[key].data); } catch (e) { return; }
+    const incomingTs = Number(blobs[key].updatedAt) || Date.now();
+    const existingRow = rows[key];
+    const existingVal = existingRow && existingRow.data !== null ? existingRow.data : keyDefault(key);
+    const mergedVal = mergeKey(key, existingVal, incoming);
+    const ts = Math.max(incomingTs, existingRow ? existingRow.updatedAt : 0);
+    updates.push({ key: key, data: JSON.stringify(mergedVal), updatedAt: ts });
+    merged[key] = JSON.stringify(mergedVal);
+  });
+  writeRows(sheet, updates);
+  return { merged: merged };
+}
+
+// A not-yet-updated phone still POSTs the old whole-blob `{data: "<json>"}`
+// shape. Split it into the same per-key pieces and route it through the
+// identical merge path so old and new clients behave consistently.
+function saveLegacyBlob(sheet, jsonStr) {
+  const incoming = JSON.parse(jsonStr);
+  const ts = Number(incoming.updatedAt) || Date.now();
+  const blobs = {};
+  Object.keys(incoming.months || {}).forEach(function (mk) { blobs['month:' + mk] = { data: JSON.stringify(incoming.months[mk]), updatedAt: ts }; });
+  ['ccPayments', 'budgets', 'customFixedItems', 'discontinuedFrom', 'trash', 'nehaBank'].forEach(function (key) {
+    if (key in incoming) blobs[key] = { data: JSON.stringify(incoming[key]), updatedAt: ts };
+  });
+  return saveBlobs(sheet, blobs);
 }
 
 // ── Additive merge (per-key, replaces the old whole-blob stale/reject guard) ─
