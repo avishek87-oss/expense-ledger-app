@@ -455,12 +455,12 @@ function writeMonthlyView(state) {
     if (md.swimmingAttended && !isDiscontinued(discontinuedFrom, 'swimming', mk))         wr('Swimming',     'Attended', curBases.swimming,     !!(md.paid||{}).swimming,     payMethod.swimming);
     if (md.bharatnatyamAttended && !isDiscontinued(discontinuedFrom, 'bharatnatyam', mk)) wr('Bharatnatyam', 'Attended', curBases.bharatnatyam, !!(md.paid||{}).bharatnatyam, payMethod.bharatnatyam);
     const cd = md.chessDates||[], chessR = curBases.chessRate||500;
-    if (cd.length && !isDiscontinued(discontinuedFrom, 'chess', mk))  wr('Chess',   cd.length+' classes ('+cd.join(',')+')',   cd.length*chessR,  !!(md.paid||{}).chess,   payMethod.chess);
+    if (cd.length && !isDiscontinued(discontinuedFrom, 'chess', mk))  wr('Chess',   cd.length+' classes ('+cd.map(fmtDMYSheet).join(', ')+')',   cd.length*chessR,  !!(md.paid||{}).chess,   payMethod.chess);
     const sd = md.skatingDates||[], skateR = curBases.skatingRate||375;
-    if (sd.length && !isDiscontinued(discontinuedFrom, 'skating', mk)) wr('Skating', sd.length+' classes ('+sd.join(',')+')', sd.length*skateR, !!(md.paid||{}).skating, payMethod.skating);
+    if (sd.length && !isDiscontinued(discontinuedFrom, 'skating', mk)) wr('Skating', sd.length+' classes ('+sd.map(fmtDMYSheet).join(', ')+')', sd.length*skateR, !!(md.paid||{}).skating, payMethod.skating);
 
     const am = md.aaviaMisc||[];
-    if (am.length) { sectionLbl(sheet, r, 'Aavia — Misc'); r++; am.forEach(it=>wr('  '+it.text, it.date||'', it.amount, !!it.paid, it.payMethod)); }
+    if (am.length) { sectionLbl(sheet, r, 'Aavia — Misc'); r++; am.forEach(it=>wr('  '+it.text, fmtDMYSheet(it.date), it.amount, !!it.paid, it.payMethod)); }
     wrCustom('aavia');
 
     // Fixed
@@ -474,19 +474,19 @@ function writeMonthlyView(state) {
 
     // Household
     sectionLbl(sheet, r, 'Household — Groceries'); r++;
-    (md.groceries||[]).forEach(g=>wr(g.vendor+' ('+g.category+')', g.date||'', g.amount, !!g.paid, g.payMethod));
+    (md.groceries||[]).forEach(g=>wr(g.vendor+' ('+g.category+')', fmtDMYSheet(g.date), g.amount, !!g.paid, g.payMethod));
 
     const hg = md.householdGroceries||[];
-    if (hg.length) { sectionLbl(sheet, r, 'Household — Household Groceries'); r++; hg.forEach(it=>wr('  '+it.text, it.date||'', it.amount, !!it.paid, it.payMethod)); }
+    if (hg.length) { sectionLbl(sheet, r, 'Household — Household Groceries'); r++; hg.forEach(it=>wr('  '+it.text, fmtDMYSheet(it.date), it.amount, !!it.paid, it.payMethod)); }
     const hm = md.householdMisc||[];
-    if (hm.length) { sectionLbl(sheet, r, 'Household — Miscellaneous'); r++; hm.forEach(it=>wr('  '+it.text, it.date||'', it.amount, !!it.paid, it.payMethod)); }
+    if (hm.length) { sectionLbl(sheet, r, 'Household — Miscellaneous'); r++; hm.forEach(it=>wr('  '+it.text, fmtDMYSheet(it.date), it.amount, !!it.paid, it.payMethod)); }
     wrCustom('household');
 
     const nm = md.nehaMisc||[];
-    if (nm.length) { sectionLbl(sheet, r, 'Neha — Miscellaneous'); r++; nm.forEach(it=>wr('  '+it.text, it.date||'', it.amount, !!it.paid, it.payMethod)); }
+    if (nm.length) { sectionLbl(sheet, r, 'Neha — Miscellaneous'); r++; nm.forEach(it=>wr('  '+it.text, fmtDMYSheet(it.date), it.amount, !!it.paid, it.payMethod)); }
     wrCustom('neha');
     const av = md.avishekMisc||[];
-    if (av.length) { sectionLbl(sheet, r, 'Avishek — Miscellaneous'); r++; av.forEach(it=>wr('  '+it.text, it.date||'', it.amount, !!it.paid, it.payMethod)); }
+    if (av.length) { sectionLbl(sheet, r, 'Avishek — Miscellaneous'); r++; av.forEach(it=>wr('  '+it.text, fmtDMYSheet(it.date), it.amount, !!it.paid, it.payMethod)); }
     wrCustom('avishek');
 
     // Month footer
@@ -500,6 +500,8 @@ function writeMonthlyView(state) {
       .setFontColor(monthTotal===monthPaid ? '#3f5344' : '#8b3a3a').setFontWeight('bold');
     r += 2;
   });
+
+  r = writeCcPaymentsSection(sheet, state, r);
 
   sheet.setColumnWidth(1, 225);
   sheet.setColumnWidth(2, 205);
@@ -516,7 +518,40 @@ function sectionLbl(sheet, r, text) {
     .setFontSize(9).setFontStyle('italic');
 }
 
+function writeCcPaymentsSection(sheet, state, r) {
+  const cc = state.ccPayments || {};
+  const CARD_LABELS = { axisCC: 'Axis CC', scapiaCC: 'Scapia CC' };
+  const keys = Object.keys(cc).filter(function (k) { return (cc[k] || []).length; });
+  if (!keys.length) return r;
+
+  sheet.getRange(r, 1, 1, 4).merge().setValue('Credit Card Payments')
+    .setFontSize(12).setFontWeight('bold').setBackground('#d9d2c0').setFontColor('#1f2a24');
+  r++;
+  ['Card', 'Date', 'Amount (₹)', 'Cycle'].forEach(function (h, i) { sheet.getRange(r, i + 1).setValue(h); });
+  sheet.getRange(r, 1, 1, 4).setFontWeight('bold').setBackground('#f7f4ec');
+  r++;
+
+  keys.forEach(function (cardKey) {
+    const pays = (cc[cardKey] || []).slice().sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+    pays.forEach(function (p) {
+      sheet.getRange(r, 1).setValue(CARD_LABELS[cardKey] || cardKey);
+      sheet.getRange(r, 2).setValue(fmtDMYSheet(p.date));
+      sheet.getRange(r, 3).setValue(Number(p.amount) || 0).setNumberFormat('#,##0.00');
+      sheet.getRange(r, 4).setValue(p.cycleKey || '');
+      r++;
+    });
+  });
+  return r + 1;
+}
+
 // ── Calc helpers (mirrors ledger.html exactly) ─────────────────────────────
+function fmtDMYSheet(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return String(d.getDate()).padStart(2, '0') + '-' + MONTHS[d.getMonth()] + '-' + d.getFullYear();
+}
 function daysInMonth(mk) { const [y,m]=mk.split('-').map(Number); return new Date(y,m,0).getDate(); }
 function fmtMonthLabel(mk) { const [y,m]=mk.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'}); }
 function defaultJapaDays(mk) { if(mk==='2026-08')return 4; if(mk==='2026-09')return 30; if(mk==='2026-10')return 31; return 0; }
