@@ -570,7 +570,10 @@ function ccSectionHtml() {
     html += `<section class="cc-card">
       <div class="cc-head">
         <span class="cc-name">${cfg.label}</span>
-        <span class="cc-out ${b.outstanding>0?'due':'ok'}">₹${inr(Math.max(0,b.outstanding))} <small>owed</small></span>
+        <span style="display:flex;align-items:baseline;gap:8px">
+          <span class="cc-out ${b.outstanding>0?'due':'ok'}">₹${inr(Math.max(0,b.outstanding))} <small>owed</small></span>
+          <button class="add-btn" style="width:auto;padding:4px 12px;font-size:12px" onclick="openCcPaySheet('${cardKey}','${esc(cfg.label)}',${b.outstanding})">Pay</button>
+        </span>
       </div>`;
     // Hide fully-paid cycles — once a month's bill is settled it drops off the list.
     const visible = b.cycles.filter(c => c.statusClass !== 'ok');

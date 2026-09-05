@@ -505,15 +505,6 @@ function closeCycleReview() {
     cycleBackHandler = null;
   }
 }
-function confirmCycleReview() {
-  if (!pendingCycleReview) return;
-  const { cardKey } = pendingCycleReview;
-  // Pay sheet defaults to the card's total outstanding across all cycles, not
-  // just the one being reviewed — recalculated in case items were edited.
-  const cardOutstanding = ccBuildCycles(cardKey).outstanding;
-  closeCycleReview();
-  openCcPaySheet(cardKey, CC_CYCLES[cardKey].label, cardOutstanding);
-}
 function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   const cycleWindow = ccCycleOf(cardKey, cycleKey);
   const cycleStart = cycleWindow.start, cycleEnd = cycleWindow.end;
@@ -570,7 +561,7 @@ function ccCycleTransactionsHtml(cardKey, cycleKey, label, total) {
   } else {
     html += `<div class="cc-empty">No transactions in this cycle</div>`;
   }
-  html += `<div class="cc-cyc-review-actions"><button class="add-btn" style="width:100%;margin-top:10px" onclick="confirmCycleReview()">Confirm & Pay</button><button class="pay-cancel" onclick="closeCycleReview()">Cancel</button></div>`;
+  html += `<div class="cc-cyc-review-actions"><button class="pay-cancel" style="width:100%;margin-top:10px" onclick="closeCycleReview()">Close</button></div>`;
   return html;
 }
 let pendingCycleEdit = null;
