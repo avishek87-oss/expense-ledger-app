@@ -457,6 +457,10 @@ function collectPaidItems(mk) {
   addFixed('Sukanya Samriddhi', sukanyaFee(mk), 'sukanya');
   const ce = carEmiFee(mk); if (ce) addFixed('Car EMI', ce, 'carEmi');
   addFixed('Rent', effectiveBase(mk,'rent',rentFee(mk)), 'rent');
+  // Custom fixed items: iterate all (not activeCustomItems) so already-paid months
+  // stay visible after a later discontinuation.
+  Object.entries(appState.customFixedItems||{}).forEach(([key, item]) =>
+    addFixed(item.label, customItemAmount(mk, key, item), key));
   const pushItems = (arr, labelFn) => (arr||[]).filter(it=>it.paid).forEach(it =>
     out.push({ label:labelFn(it), amount:Number(it.amount||0), method:it.payMethod||null, date:it.date||'' }));
   pushItems(md.aaviaMisc,          it=>'Aavia — '+it.text);
